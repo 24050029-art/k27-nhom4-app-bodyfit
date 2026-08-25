@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: bodyfit_mariadb
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: SecretPassword123
+      MYSQL_DATABASE: bodyfit_db
+      MYSQL_USER: bodyfit_user
+      MYSQL_PASSWORD: SecretPassword123
+    ports:
+      - '3306:3306'
+    volumes:
+      - mariadbdata:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    container_name: bodyfit_redis
+    restart: always
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bodyfit_api
+    restart: always
+    ports:
+      - '3000:3000'
+    environment:
+      - PORT=3000
+      - DATABASE_URL=mysql://bodyfit_user:SecretPassword123@mariadb:3306/bodyfit_db
+      - REDIS_URL=redis://redis:6379
+      - FIREBASE_PROJECT_ID=bodyfit-ai
+      - OPENAI_API_KEY=your_openai_api_key_here
+    depends_on:
+      - mariadb
+      - redis
+
+volumes:
+  mariadbdata:
+  redisdata:

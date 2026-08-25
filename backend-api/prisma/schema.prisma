@@ -1,0 +1,321 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id               String                @id @default(uuid())
+  email            String                @unique
+  username         String?               @unique @map("ten_dang_nhap")
+  passwordHash     String?               @map("mat_khau_hash")
+  authProvider     String                @default("email") @map("nha_cung_cap_auth")
+  firebaseUid      String                @unique @map("firebase_uid")
+  role             String                @default("USER") @map("vai_tro")
+  isPremium        Boolean               @default(false) @map("la_premium")
+  createdAt        DateTime              @default(now()) @map("ngay_tao")
+  updatedAt        DateTime              @updatedAt @map("ngay_cap_nhat")
+  profile          UserProfile?
+  foodLogs         FoodLog[]
+  waterLogs        WaterLog[]
+  chatLogs         ChatLog[]
+  weightLogs       WeightLog[]
+  workoutSchedules UserWorkoutSchedule[]
+  mealPlans        MealPlan[]
+  posts            CommunityPost[]
+  postLikes        CommunityPostLike[]
+  postComments     CommunityPostComment[]
+  followers        UserFollow[]          @relation("following")
+  following        UserFollow[]          @relation("follower")
+  challenges       UserChallenge[]
+  badges           UserBadge[]
+  dailyDeclarations DailyDeclaration[]
+
+  @@map("nguoi_dung")
+}
+
+model UserProfile {
+  userId         String   @id @map("ma_nguoi_dung")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName      String?  @map("ten")
+  lastName       String?  @map("ho")
+  age            Int      @map("tuoi")
+  gender         String   @map("gioi_tinh")
+  heightCm       Float    @map("chieu_cao_cm")
+  weightKg       Float    @map("can_nang_kg")
+  activityLevel  String   @map("muc_do_hoat_dong")
+  targetGoal     String   @map("muc_tieu")
+  bmi            Float    @map("bmi")
+  bmr            Float    @map("bmr")
+  tdee           Float    @map("tdee")
+  targetCalories Int      @map("calo_muc_tieu")
+  targetProtein  Int      @map("protein_muc_tieu_g")
+  targetCarbs    Int      @map("carbs_muc_tieu_g")
+  targetFat      Int      @map("chat_beo_muc_tieu_g")
+  targetWaterMl  Int      @default(2000) @map("nuoc_muc_tieu_ml")
+  bodyFatEstimate Float   @default(0) @map("ty_le_mo_uoc_tinh")
+  leanBodyMass   Float    @default(0) @map("khoi_luong_co_nac")
+  xp             Int      @default(0) @map("xp")
+  level          Int      @default(1) @map("cap_do")
+  streakDays     Int      @default(0) @map("so_ngay_lien_tuc")
+  avatarUrl      String?  @map("anh_dai_dien_url")
+  createdAt      DateTime @default(now()) @map("ngay_tao")
+  updatedAt      DateTime @updatedAt @map("ngay_cap_nhat")
+
+  @@map("ho_so_nguoi_dung")
+}
+
+model FoodLog {
+  id           String   @id @default(uuid())
+  userId       String   @map("ma_nguoi_dung")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mealType     String   @map("bua_an")
+  foodName     String   @map("ten_mon_an")
+  servingSizeG Float    @map("khoi_luong_g")
+  calories     Int      @map("calo")
+  protein      Float    @default(0) @map("protein")
+  carbs        Float    @default(0) @map("carbs")
+  fat          Float    @default(0) @map("chat_beo")
+  loggedDate   String   @map("ngay_ghi")
+  loggedAt     DateTime @default(now()) @map("thoi_gian_ghi")
+
+  @@index([userId, loggedDate], map: "idx_nhat_ky_an_uong_user_date")
+  @@map("nhat_ky_an_uong")
+}
+
+model WaterLog {
+  id         String   @id @default(uuid())
+  userId     String   @map("ma_nguoi_dung")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountMl   Int      @map("luong_nuoc_ml")
+  loggedDate String   @map("ngay_ghi")
+  loggedAt   DateTime @default(now()) @map("thoi_gian_ghi")
+
+  @@index([userId, loggedDate], map: "idx_nhat_ky_uong_nuoc_user_date")
+  @@map("nhat_ky_uong_nuoc")
+}
+
+model ChatLog {
+  id       String   @id @default(uuid())
+  userId   String   @map("ma_nguoi_dung")
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender   String   @map("nguoi_gui")
+  message  String   @db.Text @map("tin_nhan")
+  sentAt   DateTime @default(now()) @map("thoi_gian_gui")
+
+  @@index([userId, sentAt], map: "idx_lich_su_nhan_tin_user_sent")
+  @@map("lich_su_nhan_tin")
+}
+
+model WeightLog {
+  id         String   @id @default(uuid())
+  userId     String   @map("ma_nguoi_dung")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weightKg   Float    @map("can_nang_kg")
+  waistCm    Float?   @map("vong_eo_cm")
+  chestCm    Float?   @map("vong_nguc_cm")
+  hipsCm     Float?   @map("vong_mong_cm")
+  bodyFatPct Float?   @map("ty_le_mo_pct")
+  photoUrl   String?  @map("anh_url") @db.VarChar(512)
+  loggedDate String   @map("ngay_ghi")
+  loggedAt   DateTime @default(now()) @map("thoi_gian_ghi")
+
+  @@index([userId, loggedDate], map: "idx_nhat_ky_can_nang_user_date")
+  @@map("nhat_ky_can_nang")
+}
+
+model WorkoutProgram {
+  id          String                @id @default(uuid())
+  title       String                @map("tieu_de")
+  description String?               @db.Text @map("mo_ta")
+  category    String                @map("danh_muc") // GYM, CARDIO, HOME, YOGA, STRETCHING
+  difficulty  String                @map("do_kho") // BEGINNER, INTERMEDIATE, ADVANCED
+  createdAt   DateTime              @default(now()) @map("ngay_tao")
+  exercises   WorkoutExercise[]
+  schedules   UserWorkoutSchedule[]
+
+  @@map("chuong_trinh_tap_luyen")
+}
+
+model WorkoutExercise {
+  id         String         @id @default(uuid())
+  programId  String         @map("ma_chuong_trinh")
+  program    WorkoutProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  name       String         @map("ten_bai_tap")
+  videoUrl   String?        @map("video_url")
+  imageUrl   String?        @map("anh_url")
+  sets       Int            @default(3) @map("so_hiep")
+  reps       String         @default("10-12") @map("so_lan_lap")
+  orderIndex Int            @default(0) @map("thu_tu")
+
+  @@map("bai_tap_trong_chuong_trinh")
+}
+
+model UserWorkoutSchedule {
+  id            String         @id @default(uuid())
+  userId        String         @map("ma_nguoi_dung")
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programId     String         @map("ma_chuong_trinh")
+  program       WorkoutProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  scheduledDate String         @map("ngay_len_lich")
+  isCompleted   Boolean        @default(false) @map("da_hoan_thanh")
+  completedAt   DateTime?      @map("thoi_gian_hoan_thanh")
+
+  @@index([userId, scheduledDate], map: "idx_lich_tap_user_date")
+  @@map("lich_tap_nguoi_dung")
+}
+
+model MealPlan {
+  id         String        @id @default(uuid())
+  userId     String        @map("ma_nguoi_dung")
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String        @map("tieu_de")
+  dietType   String        @map("che_do_an")
+  startDate  String        @map("ngay_bat_dau")
+  isActive   Boolean       @default(true) @map("dang_hoat_dong")
+  isFavorite Boolean       @default(false) @map("la_yeu_thich")
+  createdAt  DateTime      @default(now()) @map("ngay_tao")
+  days       MealPlanDay[]
+
+  @@map("ke_hoach_an_uong")
+}
+
+model MealPlanDay {
+  id         String         @id @default(uuid())
+  mealPlanId String         @map("ma_ke_hoach_an_uong")
+  mealPlan   MealPlan       @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  dayNumber  Int            @map("ngay_so")
+  calories   Int            @default(2000) @map("calo")
+  protein    Int            @default(150) @map("protein")
+  carbs      Int            @default(200) @map("carbs")
+  fat        Int            @default(60) @map("chat_beo")
+  items      MealPlanItem[]
+
+  @@map("ngay_ke_hoach_an_uong")
+}
+
+model MealPlanItem {
+  id            String      @id @default(uuid())
+  mealPlanDayId String      @map("ma_ngay_ke_hoach")
+  mealPlanDay   MealPlanDay @relation(fields: [mealPlanDayId], references: [id], onDelete: Cascade)
+  mealType      String      @map("bua_an")
+  foodName      String      @map("ten_mon_an")
+  servingSizeG  Float       @map("khoi_luong_g")
+  calories      Int         @map("calo")
+  protein       Float       @default(0) @map("protein")
+  carbs         Float       @default(0) @map("carbs")
+  fat           Float       @default(0) @map("chat_beo")
+
+  @@map("mon_an_ke_hoach")
+}
+
+model CommunityPost {
+  id        String                 @id @default(uuid())
+  userId    String                 @map("ma_nguoi_dung")
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  username  String                 @map("ten_nguoi_dung")
+  content   String                 @db.Text @map("noi_dung")
+  photoUrl  String?                @map("anh_url") @db.VarChar(512)
+  createdAt DateTime               @default(now()) @map("ngay_tao")
+  likes     CommunityPostLike[]
+  comments  CommunityPostComment[]
+
+  @@map("bai_viet_cong_dong")
+}
+
+model CommunityPostLike {
+  id     String        @id @default(uuid())
+  postId String        @map("ma_bai_viet")
+  post   CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId String        @map("ma_nguoi_dung")
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@map("luot_thich_bai_viet")
+}
+
+model CommunityPostComment {
+  id        String        @id @default(uuid())
+  postId    String        @map("ma_bai_viet")
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String        @map("ma_nguoi_dung")
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  username  String                 @map("ten_nguoi_dung")
+  content   String        @db.Text @map("noi_dung")
+  createdAt DateTime      @default(now()) @map("ngay_tao")
+
+  @@map("binh_luan_bai_viet")
+}
+
+model UserFollow {
+  id          String   @id @default(uuid())
+  followerId  String   @map("ma_nguoi_theo_doi")
+  follower    User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String   @map("ma_nguoi_duoc_theo_doi")
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("ngay_tao")
+
+  @@unique([followerId, followingId])
+  @@map("theo_doi_nguoi_dung")
+}
+
+model Challenge {
+  id             String          @id @default(uuid())
+  title          String          @map("tieu_de")
+  description    String          @db.Text @map("mo_ta")
+  xpReward       Int             @default(100) @map("phan_thuong_xp")
+  durationDays   Int             @default(7) @map("so_ngay_dien_ra")
+  createdAt      DateTime        @default(now()) @map("ngay_tao")
+  userChallenges UserChallenge[]
+
+  @@map("thu_thach")
+}
+
+model UserChallenge {
+  id          String    @id @default(uuid())
+  userId      String    @map("ma_nguoi_dung")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId String    @map("ma_thu_thach")
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  startDate   String    @map("ngay_bat_dau")
+  status      String    @default("ONGOING") @map("trang_thai")
+  completedAt DateTime? @map("thoi_gian_hoan_thanh")
+
+  @@map("thu_thach_nguoi_dung")
+}
+
+model UserBadge {
+  id         String   @id @default(uuid())
+  userId     String   @map("ma_nguoi_dung")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String   @map("ten_huy_hieu")
+  description String? @map("mo_ta")
+  icon       String?  @map("bieu_tuong")
+  unlockedAt DateTime @default(now()) @map("thoi_gian_mo_khoa")
+
+  @@map("huy_hieu_nguoi_dung")
+}
+
+model DailyDeclaration {
+  id             String   @id @default(uuid())
+  username       String?  @map("ten_nguoi_dung")
+  date           String   @map("ngay_khai_bao")
+  activity       String   @map("hoat_dong")
+  image          String   @default("") @map("anh_dinh_kem")
+  steps          Int      @default(0) @map("so_buoc_di")
+  activeCalories Int      @default(0) @map("calo_tieu_hao")
+  activeTime     Int      @default(0) @map("thoi_gian_van_dong")
+  createdAt      DateTime @default(now()) @map("ngay_tao")
+  caloriesConsumed Int      @default(0) @map("calo_nap_vao")
+  weight           Float?   @map("can_nang")
+  waterIntake      Int      @default(0) @map("luong_nuoc_nap")
+  workoutName      String?  @map("ten_bai_tap")
+  userId         String   @map("ma_nguoi_dung")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("khai_bao_hang_ngay")
+}
