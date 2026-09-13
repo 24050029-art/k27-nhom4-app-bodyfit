@@ -11,6 +11,8 @@ import { Gradients, MaxContentWidth, Spacing, DEFAULT_AVATAR } from '@/constants
 import { useAppTheme } from '@/context/ThemeContext';
 import { useLocalDb } from '@/hooks/use-local-db';
 import { getLocalDateString } from '@/utils/date';
+import BmiGaugeChart from '@/components/bmi-gauge-chart';
+import UserActivityModal from '@/components/user-activity-modal';
 
 const goalLabels: Record<string, string> = { 
   weight_loss: 'Giảm cân', 
@@ -37,11 +39,23 @@ export default function SettingsScreen() {
     backendUrl,
     getAdminDashboard,
     communityPosts,
-    deleteCommunityPost
+    deleteCommunityPost,
+    foodLogs,
+    geminiApiKey,
+    groqApiKey,
+    openRouterApiKey,
+    saveGeminiApiKey,
+    saveGroqApiKey,
+    saveOpenRouterApiKey
   } = useLocalDb();
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [weightOpen, setWeightOpen] = useState(false);
+  const [activityModalOpen, setActivityModalOpen] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [inputGeminiKey, setInputGeminiKey] = useState('');
+  const [inputGroqKey, setInputGroqKey] = useState('');
+  const [inputOpenRouterKey, setInputOpenRouterKey] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminData, setAdminData] = useState<any>(null);
@@ -285,6 +299,30 @@ export default function SettingsScreen() {
   const targetCal = userProfile?.targetCalories || 2259;
   const bodyFatVal = userProfile?.bodyFatEstimate || 11.6;
   const leanMassVal = userProfile?.leanBodyMass || 61.9;
+  const idealWeightVal = userProfile?.idealWeightKg || 68.2;
+
+  // 7-day Calories Intake vs Target Comparison (LTAPP-35)
+  const caloriesComparisonData = useMemo(() => {
+    const days = [];
+    const today = new Date();
+    const target = targetCal;
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      const dateStr = getLocalDateString(d);
+      const dayFoods = (foodLogs || []).filter(f => (f.loggedDate || getLocalDateString()) === dateStr);
+      const consumed = dayFoods.reduce((acc, f) => acc + (f.calories || 0), 0);
+      const dayLabel = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()];
+      days.push({
+        dateStr,
+        dayLabel,
+        consumed,
+        target,
+        pct: Math.min(100, Math.round((consumed / target) * 100))
+      });
+    }
+    return days;
+  }, [foodLogs, targetCal]);
 
   const pickAndUploadAvatar = async () => {
     try {
@@ -899,6 +937,20 @@ export default function SettingsScreen() {
                   <Text style={[styles.settingValue, { color: theme.primary }]}>Quản lý</Text>
                 </Pressable>
               )}
+              <Pressable 
+                onPress={() => {
+                  setInputGeminiKey(geminiApiKey || '');
+                  setInputGroqKey(groqApiKey || '');
+                  setInputOpenRouterKey(openRouterApiKey || '');
+                  setAiModalOpen(true);
+                }} 
+                style={styles.settingRow}
+              >
+                <Text style={[styles.settingText, { color: theme.text }]}>Cấu hình AI & API Key 🤖</Text>
+                <Text style={[styles.settingValue, { color: (groqApiKey || geminiApiKey || openRouterApiKey) ? '#10B981' : theme.primary }]}>
+                  {(groqApiKey || geminiApiKey || openRouterApiKey) ? 'Đã thiết lập ✓' : 'Cài đặt'}
+                </Text>
+              </Pressable>
               <Pressable onPress={() => { clearAllData(); setStatus('Đã xóa dữ liệu cục bộ.'); }} style={styles.settingRow}>
                 <Text style={[styles.settingText, { color: theme.text }]}>Dữ liệu ứng dụng</Text>
                 <Text style={[styles.settingValue, { color: theme.danger }]}>Xóa dữ liệu</Text>
@@ -910,32 +962,17 @@ export default function SettingsScreen() {
             </View>
           )}
 
-          {/* Custom BMI Slider Card */}
-          <View style={[styles.bmiSliderCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
-            <View style={styles.bmiHeaderRow}>
-              <Text style={[styles.bmiLabel, { color: theme.textMuted }]}>Chỉ số BMI hiện tại</Text>
-              <Text style={[styles.bmiValueText, { color: theme.primary }]}>{bmiVal} ({bmiNote})</Text>
+          {/* Custom BMI Gauge Chart Card (LTAPP-28) */}
+          <View style={[styles.bmiSliderCard, { backgroundColor: theme.card, borderColor: theme.cardBorder, alignItems: 'center' }]}>
+            <View style={[styles.bmiHeaderRow, { width: '100%', marginBottom: 6 }]}>
+              <Text style={[styles.bmiLabel, { color: theme.textMuted }]}>Biểu đồ thể trạng (BMI Gauge)</Text>
+              <Pressable onPress={() => setActivityModalOpen(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,159,28,0.15)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 }}>
+                <Ionicons name="time-outline" size={14} color="#FF9F1C" />
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#FF9F1C' }}>Dòng thời gian</Text>
+              </Pressable>
             </View>
             
-            <View style={styles.bmiSliderTrackWrapper}>
-              {/* Colored Track Segments */}
-              <View style={styles.bmiSliderTrack}>
-                <View style={[styles.bmiSegment, { backgroundColor: '#3498db', borderTopLeftRadius: 3, borderBottomLeftRadius: 3 }]} />
-                <View style={[styles.bmiSegment, { backgroundColor: '#2ecc71' }]} />
-                <View style={[styles.bmiSegment, { backgroundColor: '#f39c12' }]} />
-                <View style={[styles.bmiSegment, { backgroundColor: '#e74c3c', borderTopRightRadius: 3, borderBottomRightRadius: 3 }]} />
-              </View>
-              {/* Pointer Marker */}
-              <View style={[styles.bmiMarker, { left: `${Math.min(96, Math.max(2, (bmiVal - 15) / (35 - 15) * 100))}%` }]} />
-            </View>
-
-            <View style={styles.bmiScaleLabelsRow}>
-              <Text style={[styles.scaleLabel, { color: theme.textMuted }]}>15.0</Text>
-              <Text style={[styles.scaleLabel, { color: theme.textMuted }]}>18.5</Text>
-              <Text style={[styles.scaleLabel, { color: theme.textMuted }]}>25.0</Text>
-              <Text style={[styles.scaleLabel, { color: theme.textMuted }]}>30.0</Text>
-              <Text style={[styles.scaleLabel, { color: theme.textMuted }]}>35.0</Text>
-            </View>
+            <BmiGaugeChart bmi={bmiVal} width={280} textColor={theme.text} subTextColor={theme.textMuted} />
           </View>
 
           {/* Custom Weight Trend Chart Card */}
@@ -1059,10 +1096,56 @@ export default function SettingsScreen() {
                 <Text style={[styles.gridCardSub, { color: theme.textMuted }]}>Body Fat Estimate</Text>
               </View>
               <View style={[styles.gridCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+                <Text style={[styles.gridCardLabel, { color: theme.textSecondary }]}>Cân nặng lý tưởng</Text>
+                <Text style={[styles.gridCardValue, { color: '#10B981' }]}>{idealWeightVal} kg</Text>
+                <Text style={[styles.gridCardSub, { color: theme.textMuted }]}>Chuẩn Robinson</Text>
+              </View>
+              <View style={[styles.gridCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
                 <Text style={[styles.gridCardLabel, { color: theme.textSecondary }]}>Khối lượng nạc</Text>
                 <Text style={[styles.gridCardValue, { color: '#FF9F1C' }]}>{leanMassVal} kg</Text>
                 <Text style={[styles.gridCardSub, { color: theme.textMuted }]}>Lean Body Mass</Text>
               </View>
+            </View>
+          </View>
+
+          {/* LTAPP-35: Thống kê Calo nạp vs Mục tiêu */}
+          <View style={[styles.weightChartCard, { backgroundColor: theme.card, borderColor: theme.cardBorder, marginTop: 14 }]}>
+            <View style={styles.chartHeaderRow}>
+              <View>
+                <Text style={[styles.chartTitleText, { color: theme.text }]}>Calo nạp vs Mục tiêu (7 ngày)</Text>
+                <Text style={{ fontSize: 11, color: theme.textMuted, marginTop: 2 }}>
+                  Định mức ngày: {targetCal} kcal
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#FF9F1C' }} />
+                  <Text style={{ fontSize: 10, color: theme.textMuted }}>Đã nạp</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: '#38BDF8' }} />
+                  <Text style={{ fontSize: 10, color: theme.textMuted }}>Mục tiêu</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 130, paddingTop: 16, paddingHorizontal: 4 }}>
+              {caloriesComparisonData.map((d, idx) => {
+                const barHeight = Math.min(100, Math.max(10, (d.consumed / targetCal) * 85));
+                return (
+                  <View key={idx} style={{ alignItems: 'center', flex: 1 }}>
+                    <Text style={{ fontSize: 9, color: theme.textMuted, marginBottom: 3 }}>
+                      {d.consumed > 0 ? d.consumed : 0}
+                    </Text>
+                    <View style={{ width: 16, height: 85, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 5, justifyContent: 'flex-end', overflow: 'hidden' }}>
+                      <View style={{ width: '100%', height: `${barHeight}%`, backgroundColor: d.consumed > targetCal ? '#EF4444' : '#FF9F1C', borderRadius: 5 }} />
+                    </View>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: theme.text, marginTop: 5 }}>
+                      {d.dayLabel}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
           </View>
 
@@ -1349,6 +1432,134 @@ export default function SettingsScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
+        {/* LTAPP-63: Modal Lịch Sử Hoạt Động Người Dùng */}
+        <UserActivityModal visible={activityModalOpen} onClose={() => setActivityModalOpen(false)} />
+
+        {/* Modal Cấu hình AI & API Key */}
+        <Modal visible={aiModalOpen} transparent animationType="fade" onRequestClose={() => setAiModalOpen(false)}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 18 }}
+          >
+            <Pressable onPress={() => setAiModalOpen(false)} style={StyleSheet.absoluteFill} />
+            <View 
+              style={{
+                width: '100%',
+                maxWidth: 440,
+                backgroundColor: '#1C1917',
+                borderRadius: 24,
+                borderWidth: 1.2,
+                borderColor: 'rgba(255, 159, 28, 0.35)',
+                padding: 20,
+                maxHeight: '90%',
+              }}
+            >
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={[styles.modalTitle, { color: '#FFF8E7', fontSize: 17 }]}>Cấu hình AI & API Key 🤖</Text>
+                  <Pressable onPress={() => setAiModalOpen(false)} hitSlop={10}>
+                    <Ionicons name="close-circle" size={24} color="rgba(255, 248, 231, 0.4)" />
+                  </Pressable>
+                </View>
+
+                <Text style={{ color: 'rgba(255, 248, 231, 0.65)', fontSize: 12, lineHeight: 18 }}>
+                  Nhập API Key để AI nhận diện chính xác món ăn (quét ảnh) và hỗ trợ trả lời dinh dưỡng theo thời gian thực.
+                </Text>
+
+                {/* 1. Groq Key (Khuyên dùng) */}
+                <View style={{ gap: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ color: '#FF9F1C', fontSize: 12, fontWeight: '800' }}>
+                      ⚡ Groq API Key (Khuyên dùng - 0.5s)
+                    </Text>
+                    <Text style={{ color: '#10B981', fontSize: 10, fontWeight: '700' }}>Miễn phí 100%</Text>
+                  </View>
+                  <TextInput
+                    value={inputGroqKey}
+                    onChangeText={setInputGroqKey}
+                    placeholder="gsk_..."
+                    placeholderTextColor="rgba(255, 248, 231, 0.3)"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={[styles.input, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderColor: 'rgba(255, 159, 28, 0.3)' }]}
+                  />
+                  <Text style={{ color: 'rgba(255, 248, 231, 0.4)', fontSize: 10 }}>
+                    Lấy miễn phí tại: console.groq.com/keys (Không cần thẻ ngân hàng)
+                  </Text>
+                </View>
+
+                {/* 2. Google Gemini Key */}
+                <View style={{ gap: 6, marginTop: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ color: '#60A5FA', fontSize: 12, fontWeight: '800' }}>
+                      ✨ Google Gemini API Key
+                    </Text>
+                    <Text style={{ color: '#10B981', fontSize: 10, fontWeight: '700' }}>Miễn phí</Text>
+                  </View>
+                  <TextInput
+                    value={inputGeminiKey}
+                    onChangeText={setInputGeminiKey}
+                    placeholder="AIzaSy..."
+                    placeholderTextColor="rgba(255, 248, 231, 0.3)"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={[styles.input, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderColor: 'rgba(96, 165, 250, 0.3)' }]}
+                  />
+                  <Text style={{ color: 'rgba(255, 248, 231, 0.4)', fontSize: 10 }}>
+                    Lấy tại: aistudio.google.com/apikey (Key chuẩn bắt đầu bằng AIzaSy...)
+                  </Text>
+                </View>
+
+                {/* 3. OpenRouter Key */}
+                <View style={{ gap: 6, marginTop: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ color: '#A78BFA', fontSize: 12, fontWeight: '800' }}>
+                      🌐 OpenRouter API Key (Tùy chọn)
+                    </Text>
+                    <Text style={{ color: '#10B981', fontSize: 10, fontWeight: '700' }}>Free models</Text>
+                  </View>
+                  <TextInput
+                    value={inputOpenRouterKey}
+                    onChangeText={setInputOpenRouterKey}
+                    placeholder="sk-or-v1-..."
+                    placeholderTextColor="rgba(255, 248, 231, 0.3)"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={[styles.input, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderColor: 'rgba(167, 139, 250, 0.3)' }]}
+                  />
+                  <Text style={{ color: 'rgba(255, 248, 231, 0.4)', fontSize: 10 }}>
+                    Lấy tại: openrouter.ai/keys (Hỗ trợ Llama 3.2 Vision free)
+                  </Text>
+                </View>
+
+                {/* Save Button */}
+                <Pressable 
+                  onPress={() => {
+                    saveGroqApiKey(inputGroqKey.trim());
+                    saveGeminiApiKey(inputGeminiKey.trim());
+                    saveOpenRouterApiKey(inputOpenRouterKey.trim());
+                    setAiModalOpen(false);
+                    Alert.alert('Thành công 🎉', 'Đã cập nhật cấu hình API Key cho AI!');
+                  }} 
+                  style={{ marginTop: 8 }}
+                >
+                  <View style={[styles.saveButton, { backgroundColor: '#FF9F1C' }]}>
+                    <Text style={[styles.saveText, { color: '#100E0C', fontWeight: '900', fontSize: 14 }]}>
+                      Lưu Cấu Hình AI 🚀
+                    </Text>
+                  </View>
+                </Pressable>
+
+                <Pressable onPress={() => setAiModalOpen(false)} style={styles.cancel}>
+                  <Text style={{ color: 'rgba(255, 248, 231, 0.5)', fontWeight: '800' }}>Đóng</Text>
+                </Pressable>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
       </SafeAreaView>
     </View>

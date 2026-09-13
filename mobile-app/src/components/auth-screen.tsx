@@ -382,22 +382,35 @@ export default function AuthScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1, width: '100%' }}
       >
-        <ScrollView 
+        <ScrollView
           ref={scrollRef}
-          contentContainerStyle={styles.scrollContent} 
+          contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
 
           {/* Header/Logo */}
           <View style={styles.headerContainer}>
-            <ThemedView type="backgroundElement" style={[styles.logoCircle, { backgroundColor: theme.primary + '15' }]}>
+            <ThemedView type="backgroundElement" style={[styles.logoCircle, { backgroundColor: theme.primary + '15', borderWidth: 2, borderColor: theme.primary }]}>
               <ThemedText style={[styles.logoText, { color: theme.primary }]}>🏋️‍♂️</ThemedText>
             </ThemedView>
-            <ThemedText type="subtitle" style={styles.appName}>BodyFit</ThemedText>
+            <ThemedText type="subtitle" style={[styles.appName, { fontSize: 28, fontWeight: '900', letterSpacing: 1 }]}>BODYFIT </ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={styles.appSub}>
-              Huấn luyện viên dinh dưỡng & thể hình thông minh
+              Huấn luyện viên Tập Gym & Dinh dưỡng AI cá nhân
             </ThemedText>
+
+            {/* Feature Pills */}
+            <View style={{ flexDirection: 'row', gap: 6, marginTop: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <View style={{ backgroundColor: theme.primary + '15', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: theme.primary + '30' }}>
+                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: theme.primary }}>🏋️ Tập Gym Chuẩn Y Khoa</ThemedText>
+              </View>
+              <View style={{ backgroundColor: '#28C76F15', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#28C76F30' }}>
+                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#28C76F' }}>🥗 Quét Món Ăn Kcal AI</ThemedText>
+              </View>
+              <View style={{ backgroundColor: '#FF5E3615', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#FF5E3630' }}>
+                <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#FF5E36' }}>🤖 AI Coach 24/7</ThemedText>
+              </View>
+            </View>
           </View>
 
           {/* Tab Selection */}
@@ -623,7 +636,7 @@ export default function AuthScreen() {
                     placeholder="Nhập tên đăng nhập..."
                     placeholderTextColor={theme.textSecondary}
                     value={username}
-                    
+
                     onChangeText={setUsername}
                     autoCapitalize="none"
                     style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected, backgroundColor: theme.background }]}
@@ -658,7 +671,7 @@ export default function AuthScreen() {
                     placeholder="Nhập mật khẩu..."
                     placeholderTextColor={theme.textSecondary}
                     value={password}
-                    
+
                     onChangeText={setPassword}
                     secureTextEntry
                     autoCapitalize="none"

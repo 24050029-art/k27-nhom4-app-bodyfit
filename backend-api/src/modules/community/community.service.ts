@@ -155,8 +155,51 @@ export class CommunityService {
     return { success: true, message: 'Đã xóa bài đăng thành công' };
   }
 
+  private async ensurePostExists(postId: string, fallbackUserId: string) {
+    let post = await this.prisma.communityPost.findUnique({
+      where: { id: postId }
+    });
+
+    if (!post) {
+      const seedDefaults: Record<string, { username: string; content: string; photoUrl?: string }> = {
+        p1: {
+          username: 'Lê Minh Hùng',
+          content: 'Hôm nay làm đĩa salad cá ngừ tràn trề protein sau buổi tập ngực cực phê! Mục tiêu 30 ngày giảm cân cố lên anh em ơi!',
+          photoUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80'
+        },
+        p2: {
+          username: 'Trần Thảo',
+          content: 'Dậy sớm chạy bộ 5km đón bình minh. Uống đủ 1 cốc nước ấm trước khi chạy giúp thanh lọc cơ thể rất tốt 🏃‍♀️',
+          photoUrl: 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?auto=format&fit=crop&w=600&q=80'
+        },
+        p3: {
+          username: 'Nguyễn Văn Đạt',
+          content: 'Mới check-in tại phòng gym, hoàn thành 4 hiệp Squat tạ nặng. Cố gắng phá vỡ giới hạn bản thân mỗi ngày! 🔥🏋️‍♂️',
+          photoUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80'
+        }
+      };
+
+      const seedData = seedDefaults[postId] || {
+        username: 'Cộng đồng BodyFit',
+        content: 'Bài viết chia sẻ từ thành viên cộng đồng BodyFit 💪'
+      };
+
+      post = await this.prisma.communityPost.create({
+        data: {
+          id: postId,
+          userId: fallbackUserId,
+          username: seedData.username,
+          content: seedData.content,
+          photoUrl: seedData.photoUrl || null
+        }
+      });
+    }
+    return post;
+  }
+
   async toggleLike(firebaseUid: string, postId: string) {
     const { id: userId } = await this.getUserIdAndUsername(firebaseUid);
+    await this.ensurePostExists(postId, userId);
 
     const existingLike = await this.prisma.communityPostLike.findUnique({
       where: {
@@ -190,6 +233,7 @@ export class CommunityService {
 
   async addComment(firebaseUid: string, postId: string, content: string) {
     const { id: userId, username } = await this.getUserIdAndUsername(firebaseUid);
+    await this.ensurePostExists(postId, userId);
 
     const comment = await this.prisma.communityPostComment.create({
       data: {

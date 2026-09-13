@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider, Stack } from 'expo-router';
 import React, { useEffect } from 'react';
 import { View, Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { LocalDbProvider, useLocalDb } from '@/hooks/use-local-db';
@@ -59,15 +60,28 @@ function AppContent() {
   return (
     <WebDesktopLayout>
       <NavThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: Platform.OS === 'web' ? 'fade' : 'slide_from_right',
+            gestureEnabled: true,
+            gestureDirection: 'horizontal',
+            fullScreenGestureEnabled: true,
+          }}
+        >
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="declare" />
+          <Stack.Screen name="coach" />
+          <Stack.Screen name="journal" />
+          <Stack.Screen name="workout" />
+          <Stack.Screen name="settings" />
           <Stack.Screen name="admin" />
           <Stack.Screen name="activity-schedule" />
           <Stack.Screen name="explore" />
           <Stack.Screen name="weight-tracker" />
           <Stack.Screen name="meal-plan" />
-          <Stack.Screen name={'premium'} />
+          <Stack.Screen name="notifications" />
+          <Stack.Screen name="premium" />
         </Stack>
       </NavThemeProvider>
     </WebDesktopLayout>
@@ -76,11 +90,13 @@ function AppContent() {
 
 export default function TabLayout() {
   return (
-    <ThemeProvider>
-      <LocalDbProvider>
-        <AnimatedSplashOverlay />
-        <AppContent />
-      </LocalDbProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <LocalDbProvider>
+          <AnimatedSplashOverlay />
+          <AppContent />
+        </LocalDbProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

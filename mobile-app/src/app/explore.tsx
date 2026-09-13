@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 function StrengthChart({ history }: { history: LiftingHistoryLog[] }) {
   const sorted = [...history].sort((a, b) => a.loggedDate.localeCompare(b.loggedDate));
-  
+
   if (sorted.length < 2) {
     return (
       <View style={{ height: 160, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255, 159, 28, 0.25)' }}>
@@ -26,7 +26,7 @@ function StrengthChart({ history }: { history: LiftingHistoryLog[] }) {
   const paddingRight = 15;
   const paddingTop = 25;
   const paddingBottom = 25;
-  
+
   const chartWidth = width - paddingLeft - paddingRight;
   const chartHeight = height - paddingTop - paddingBottom;
 
@@ -68,20 +68,20 @@ function StrengthChart({ history }: { history: LiftingHistoryLog[] }) {
         {/* Grid lines & Y labels */}
         {gridLines.map((line, idx) => (
           <G key={idx}>
-            <Line 
-              x1={paddingLeft} 
-              y1={line.y} 
-              x2={width - paddingRight} 
-              y2={line.y} 
-              stroke="rgba(255,255,255,0.1)" 
-              strokeWidth="1" 
+            <Line
+              x1={paddingLeft}
+              y1={line.y}
+              x2={width - paddingRight}
+              y2={line.y}
+              stroke="rgba(255,255,255,0.1)"
+              strokeWidth="1"
               strokeDasharray="4 4"
             />
-            <SvgText 
-              x={paddingLeft - 8} 
-              y={line.y + 4} 
-              fill="#94A3B8" 
-              fontSize="9" 
+            <SvgText
+              x={paddingLeft - 8}
+              y={line.y + 4}
+              fill="#94A3B8"
+              fontSize="9"
               textAnchor="end"
             >
               {line.w}kg
@@ -150,15 +150,15 @@ export default function ExploreScreen() {
   const { width } = useWindowDimensions();
   const isWebDesktop = Platform.OS === 'web' && width > 900;
 
-  const { 
-    userProfile, 
+  const {
+    userProfile,
     currentUser,
     isAdmin,
     backendUrl,
-    communityPosts, 
-    addCommunityPost, 
+    communityPosts,
+    addCommunityPost,
     deleteCommunityPost,
-    toggleLikePost, 
+    toggleLikePost,
     addCommentToPost,
     challenges,
     userChallenges,
@@ -464,9 +464,9 @@ export default function ExploreScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
-      <LinearGradient 
-        colors={isDark ? ['#0F0D0B', '#171411', '#0A0907'] : [theme.background, theme.backgroundSecondary, theme.background]} 
-        style={StyleSheet.absoluteFill} 
+      <LinearGradient
+        colors={isDark ? ['#0F0D0B', '#171411', '#0A0907'] : [theme.background, theme.backgroundSecondary, theme.background]}
+        style={StyleSheet.absoluteFill}
       />
 
       {/* Top Header Navigation Segment Tabs */}
@@ -479,13 +479,13 @@ export default function ExploreScreen() {
         ] as const).map(segment => {
           const isActive = activeSegment === segment.key;
           return (
-            <Pressable 
+            <Pressable
               key={segment.key}
               onPress={() => setActiveSegment(segment.key)}
               style={[
-                styles.segmentBtn, 
-                isActive 
-                  ? { backgroundColor: '#FF9F1C', borderWidth: 1, borderColor: '#FF9F1C' } 
+                styles.segmentBtn,
+                isActive
+                  ? { backgroundColor: '#FF9F1C', borderWidth: 1, borderColor: '#FF9F1C' }
                   : { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)', borderWidth: 1, borderColor: theme.cardBorder }
               ]}
             >
@@ -498,13 +498,13 @@ export default function ExploreScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* RESPONSIVE DUAL-COLUMN CONTAINER ON WEB DESKTOP */}
         <View style={isWebDesktop ? styles.desktopLayoutRow : styles.mobileLayoutCol}>
-          
+
           {/* LEFT / MAIN COLUMN (SOCIAL FEED) */}
           <View style={isWebDesktop ? styles.mainFeedCol : { width: '100%', gap: Spacing.three }}>
-            
+
             {activeSegment === 'feed' && (
               <>
                 {/* SOCIAL NETWORK POST COMPOSER BOX */}
@@ -577,35 +577,35 @@ export default function ExploreScreen() {
                   {/* Quick Tagging Buttons & Submit Action Bar */}
                   <View style={styles.composerActionBar}>
                     <View style={styles.quickTagsRow}>
-                      <Pressable 
+                      <Pressable
                         onPress={() => {
                           if (!newPostPhoto) {
                             handlePickPostPhoto();
                           } else {
                             setShowPhotoInput(!showPhotoInput);
                           }
-                        }} 
+                        }}
                         style={[styles.quickTagBtn, (showPhotoInput || !!newPostPhoto) && { backgroundColor: 'rgba(255, 159, 28, 0.25)', borderColor: '#FF9F1C' }]}
                       >
                         <Text style={styles.quickTagText}>{newPostPhoto ? '🖼️ Đã đính kèm ảnh' : '📷 Gắn file ảnh'}</Text>
                       </Pressable>
 
-                      <Pressable 
-                        onPress={() => setNewPostText(prev => `${prev} #TậpLuyện #Gym #Squat `)} 
+                      <Pressable
+                        onPress={() => setNewPostText(prev => `${prev} #TậpLuyện #Gym #Squat `)}
                         style={[styles.quickTagBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)', borderColor: theme.cardBorder }]}
                       >
                         <Text style={[styles.quickTagText, { color: theme.textSecondary }]}>🏋️ #TậpLuyện</Text>
                       </Pressable>
 
-                      <Pressable 
-                        onPress={() => setNewPostText(prev => `${prev} #DinhDưỡng #EatClean #Calo `)} 
+                      <Pressable
+                        onPress={() => setNewPostText(prev => `${prev} #DinhDưỡng #EatClean #Calo `)}
                         style={[styles.quickTagBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)', borderColor: theme.cardBorder }]}
                       >
                         <Text style={[styles.quickTagText, { color: theme.textSecondary }]}>🥗 #DinhDưỡng</Text>
                       </Pressable>
                     </View>
 
-                    <Pressable 
+                    <Pressable
                       onPress={handleCreatePost}
                       disabled={isSubmittingPost || !newPostText.trim()}
                       style={[styles.publishPostBtn, (!newPostText.trim() || isSubmittingPost) && { opacity: 0.6 }]}
@@ -623,21 +623,21 @@ export default function ExploreScreen() {
                 <View style={styles.feedFiltersBar}>
                   <Text style={[styles.feedFiltersTitle, { color: theme.textMuted }]}>BẢNG TIN CỘNG ĐỒNG</Text>
                   <View style={styles.feedFilterPills}>
-                    <Pressable 
+                    <Pressable
                       onPress={() => setFeedFilter('all')}
                       style={[styles.filterPill, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)' }, feedFilter === 'all' && styles.filterPillActive]}
                     >
                       <Text style={[styles.filterPillText, { color: theme.textMuted }, feedFilter === 'all' && styles.filterPillTextActive]}>🔥 Tất cả ({communityPosts.length})</Text>
                     </Pressable>
 
-                    <Pressable 
+                    <Pressable
                       onPress={() => setFeedFilter('popular')}
                       style={[styles.filterPill, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)' }, feedFilter === 'popular' && styles.filterPillActive]}
                     >
                       <Text style={[styles.filterPillText, { color: theme.textMuted }, feedFilter === 'popular' && styles.filterPillTextActive]}>❤️ Yêu thích</Text>
                     </Pressable>
 
-                    <Pressable 
+                    <Pressable
                       onPress={() => setFeedFilter('mine')}
                       style={[styles.filterPill, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)' }, feedFilter === 'mine' && styles.filterPillActive]}
                     >
@@ -658,8 +658,8 @@ export default function ExploreScreen() {
                     const isLikedByMe = post.likes.some(l => l.userId === myUid);
                     const isMyPost = post.userId === myUid || post.username === currentUser?.username;
                     const canDelete = isMyPost || isAdmin || currentUser?.role === 'ADMIN';
-                    const rawAvatar = isMyPost 
-                      ? myAvatar 
+                    const rawAvatar = isMyPost
+                      ? myAvatar
                       : ((post as any).userProfile?.avatarUrl || (post as any).avatarUrl || DEFAULT_AVATAR);
                     const authorAvatar = formatAvatar(rawAvatar);
 
@@ -669,9 +669,9 @@ export default function ExploreScreen() {
                         <View style={styles.postCardHeader}>
                           <View style={styles.postAuthorInfo}>
                             <View style={styles.avatarWrap}>
-                              <Image 
-                                source={{ uri: authorAvatar }} 
-                                style={styles.postAvatar} 
+                              <Image
+                                source={{ uri: authorAvatar }}
+                                style={styles.postAvatar}
                               />
                               <View style={[styles.levelBadge, { backgroundColor: '#FF9F1C' }]}>
                                 <Text style={styles.levelBadgeText}>Lv.1</Text>
@@ -694,10 +694,10 @@ export default function ExploreScreen() {
                           </View>
 
                           {canDelete ? (
-                            <Pressable 
+                            <Pressable
                               onPress={() => {
-                                const confirmMsg = isAdmin && !isMyPost 
-                                  ? `[ADMIN] Bạn có chắc chắn muốn xóa bài viết này của "${post.username}" không?` 
+                                const confirmMsg = isAdmin && !isMyPost
+                                  ? `[ADMIN] Bạn có chắc chắn muốn xóa bài viết này của "${post.username}" không?`
                                   : 'Bạn có chắc chắn muốn xóa bài viết này không?';
 
                                 if (Platform.OS === 'web') {
@@ -726,13 +726,13 @@ export default function ExploreScreen() {
 
                         {/* Post Body Content */}
                         <Text style={[styles.postContentText, { color: theme.text }]}>{post.content}</Text>
-                        
+
                         {/* Post Image Attachment */}
                         {post.photoUrl ? (
                           <View style={styles.postImageContainer}>
-                            <Image 
-                              source={{ uri: formatMediaUrl(post.photoUrl) || DEFAULT_AVATAR }} 
-                              style={styles.postMediaImg} 
+                            <Image
+                              source={{ uri: formatMediaUrl(post.photoUrl) || DEFAULT_AVATAR }}
+                              style={styles.postMediaImg}
                               resizeMode="cover"
                             />
                           </View>
@@ -752,8 +752,8 @@ export default function ExploreScreen() {
 
                         {/* Social Interaction Bar */}
                         <View style={styles.socialActionBar}>
-                          <Pressable 
-                            onPress={() => toggleLikePost(post.id)} 
+                          <Pressable
+                            onPress={() => toggleLikePost(post.id)}
                             style={[styles.socialActionBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)' }, isLikedByMe && { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}
                           >
                             <Text style={styles.socialActionIcon}>{isLikedByMe ? '❤️' : '🤍'}</Text>
@@ -767,8 +767,8 @@ export default function ExploreScreen() {
                             <Text style={[styles.socialActionText, { color: theme.textSecondary }]}>Bình luận</Text>
                           </Pressable>
 
-                          <Pressable 
-                            onPress={() => alert('Đã sao chép liên kết bài viết!')} 
+                          <Pressable
+                            onPress={() => alert('Đã sao chép liên kết bài viết!')}
                             style={[styles.socialActionBtn, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)' }]}
                           >
                             <Text style={styles.socialActionIcon}>🔄</Text>
@@ -804,8 +804,8 @@ export default function ExploreScreen() {
                             onSubmitEditing={() => handleCommentSubmit(post.id)}
                             style={[styles.commentTextInput, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
                           />
-                          <Pressable 
-                            onPress={() => handleCommentSubmit(post.id)} 
+                          <Pressable
+                            onPress={() => handleCommentSubmit(post.id)}
                             disabled={!commentTexts[post.id]?.trim()}
                             style={[styles.sendCommentBtn, !commentTexts[post.id]?.trim() && { opacity: 0.5 }]}
                           >
@@ -833,7 +833,7 @@ export default function ExploreScreen() {
                 {challenges.map(chal => {
                   const joined = isChallengeJoined(chal.id);
                   const completed = isChallengeCompleted(chal.id);
-                  
+
                   return (
                     <View key={chal.id} style={[styles.challengeCard, completed && { borderColor: '#FF9F1C', borderWidth: 1.5 }]}>
                       <View style={styles.challengeHeader}>
@@ -851,23 +851,23 @@ export default function ExploreScreen() {
                           </View>
                         ) : null}
                       </View>
-                      
+
                       <Text style={{ fontSize: 13, color: 'rgba(255, 248, 231, 0.6)', marginTop: Spacing.one }}>
                         {chal.description}
                       </Text>
-                      
+
                       <View style={styles.postDivider} />
-                      
+
                       {!joined ? (
-                        <Pressable 
-                          onPress={() => joinChallenge(chal.id)} 
+                        <Pressable
+                          onPress={() => joinChallenge(chal.id)}
                           style={[styles.challengeActionBtn, { backgroundColor: '#FF9F1C' }]}
                         >
                           <Text style={styles.btnTextDark}>Tham gia thử thách</Text>
                         </Pressable>
                       ) : !completed ? (
-                        <Pressable 
-                          onPress={() => completeChallenge(chal.id)} 
+                        <Pressable
+                          onPress={() => completeChallenge(chal.id)}
                           style={[styles.challengeActionBtn, { backgroundColor: '#F59E0B' }]}
                         >
                           <Text style={styles.btnTextDark}>Đóng dấu Hoàn thành</Text>
@@ -904,7 +904,7 @@ export default function ExploreScreen() {
                       Top Huấn Luyện Tích Cực 🔥
                     </Text>
                     <View style={styles.postDivider} />
-                    
+
                     {leaderboard.topActive.map((user: any, index: number) => (
                       <View key={index} style={styles.leaderboardRow}>
                         <Text style={[styles.rankText, index === 0 && { color: '#F59E0B' }]}>
@@ -997,7 +997,7 @@ export default function ExploreScreen() {
 
           {/* RIGHT SIDEBAR WIDGETS COLUMN (VISIBILITY ON DESKTOP & MOBILE INTEGRATION) */}
           <View style={isWebDesktop ? styles.sidebarCol : { width: '100%', gap: Spacing.three, marginTop: Spacing.two }}>
-            
+
             {/* WIDGET 1: DAILY QUESTS & REWARDS */}
             <View style={[styles.widgetCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
               <View style={styles.widgetHeader}>
@@ -1077,11 +1077,11 @@ export default function ExploreScreen() {
                   {userBadges.map(badge => (
                     <View key={badge.id} style={[styles.badgeMiniPill, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)', borderColor: theme.cardBorder }]}>
                       <Text style={{ fontSize: 14 }}>
-                        {badge.icon === 'droplet' ? '💧' : 
-                         badge.icon === 'star' ? '⭐' : 
-                         badge.icon === 'bench_badge' ? '🦍' :
-                         badge.icon === 'squat_badge' ? '🦵' :
-                         badge.icon === 'fat_destroyer' ? '⚔️' : '🏅'}
+                        {badge.icon === 'droplet' ? '💧' :
+                          badge.icon === 'star' ? '⭐' :
+                            badge.icon === 'bench_badge' ? '🦍' :
+                              badge.icon === 'squat_badge' ? '🦵' :
+                                badge.icon === 'fat_destroyer' ? '⚔️' : '🏅'}
                       </Text>
                       <Text style={[styles.badgeMiniText, { color: theme.text }]} numberOfLines={1}>{badge.name}</Text>
                     </View>
@@ -1126,8 +1126,8 @@ export default function ExploreScreen() {
                         <Text style={{ color: theme.textMuted, fontSize: 11, fontWeight: '700' }}>ĐÃ SỞ HỮU</Text>
                       </View>
                     ) : (
-                      <Pressable 
-                        onPress={() => buyBadge(item.name, item.cost, item.icon)} 
+                      <Pressable
+                        onPress={() => buyBadge(item.name, item.cost, item.icon)}
                         style={[styles.buyBtn, { backgroundColor: '#FF9F1C' }]}
                       >
                         <Text style={{ color: '#100E0C', fontSize: 11, fontWeight: '900' }}>MUA (🪙)</Text>

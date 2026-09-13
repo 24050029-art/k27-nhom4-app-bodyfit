@@ -37,6 +37,7 @@ export default function HomeScreen() {
     hasCompletedOnboarding,
     setHasCompletedOnboarding,
     currentUser,
+    setActiveTabRoute,
   } = useLocalDb();
   const [avatarUri, setAvatarUri] = useState(userProfile?.avatarUrl || DEFAULT_AVATAR);
 
@@ -138,6 +139,9 @@ export default function HomeScreen() {
   const [mProtein, setMProtein] = useState('');
   const [mCarbs, setMCarbs] = useState('');
   const [mFat, setMFat] = useState('');
+  const [mFiber, setMFiber] = useState('');
+  const [mSugar, setMSugar] = useState('');
+  const [mSodium, setMSodium] = useState('');
 
   // AI Scan Modal States
   const [isAiScanning, setIsAiScanning] = useState(false);
@@ -261,16 +265,22 @@ export default function HomeScreen() {
     const prot = parseInt(mProtein) || 0;
     const cb = parseInt(mCarbs) || 0;
     const ft = parseInt(mFat) || 0;
+    const fib = parseInt(mFiber) || undefined;
+    const sug = parseInt(mSugar) || undefined;
+    const sod = parseInt(mSodium) || undefined;
 
     // Close modal INSTANTLY (0ms response time)
     setManualLogOpen(false);
 
-    await addFoodLog(mMealType, mFoodName.trim(), 100, cal, prot, cb, ft, today);
+    await addFoodLog(mMealType, mFoodName.trim(), 100, cal, prot, cb, ft, today, fib, sug, sod);
     setMFoodName('');
     setMCalories('');
     setMProtein('');
     setMCarbs('');
     setMFat('');
+    setMFiber('');
+    setMSugar('');
+    setMSodium('');
     Alert.alert('Thành công', 'Đã lưu thực phẩm vào nhật ký! 📝');
   };
 
@@ -294,9 +304,11 @@ export default function HomeScreen() {
 
     setMMealType(defaultMeal);
 
-    // Switch from AI Result Modal to Manual Log Modal
+    // Switch from AI Result Modal to Manual Log Modal safely with small delay
     setAiModalOpen(false);
-    setManualLogOpen(true);
+    setTimeout(() => {
+      setManualLogOpen(true);
+    }, 300);
   };
 
   const runScan = async () => {
@@ -304,33 +316,46 @@ export default function HomeScreen() {
       setWebFeatureModalOpen(true);
       return;
     }
-    // 1. Request camera permission
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Quyền truy cập', 'Ứng dụng cần quyền sử dụng camera để chụp ảnh món ăn của bạn.');
-      return;
-    }
 
-    // 2. Launch Camera
     try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Quyền truy cập', 'Ứng dụng cần quyền sử dụng camera để chụp ảnh món ăn của bạn.');
+        return;
+      }
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        quality: 0.8,
-        base64: true,
+        quality: 0.7,
       });
 
       if (result.canceled || !result.assets || !result.assets[0]) {
         return;
       }
 
-      const base64Data = result.assets[0].base64;
-      if (!base64Data) {
-        Alert.alert('Lỗi', 'Không thể lấy dữ liệu ảnh từ camera.');
-        return;
+      setIsAiScanning(true);
+
+      // Compress and resize image to prevent memory spikes and bridge freezing
+      let base64Data: string | undefined;
+      try {
+        const ImageManipulator = require('expo-image-manipulator');
+        const manipResult = await ImageManipulator.manipulateAsync(
+          result.assets[0].uri,
+          [{ resize: { width: 600 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        base64Data = manipResult.base64;
+      } catch (manipErr) {
+        console.warn('ImageManipulator fallback in index:', manipErr);
+        base64Data = result.assets[0].base64 ?? undefined;
       }
 
-      setIsAiScanning(true);
+      if (!base64Data) {
+        setIsAiScanning(false);
+        Alert.alert('Lỗi', 'Không thể xử lý hình ảnh món ăn.');
+        return;
+      }
 
       let scan;
       try {
@@ -344,13 +369,11 @@ export default function HomeScreen() {
           carbs: 78,
           fat: 18,
         };
-      } finally {
-        setIsAiScanning(false);
       }
 
       const name = scan?.mealDetected || 'Món ăn quét bằng AI';
       
-      // Open our beautiful custom AI Modal instead of Alert
+      // Open result modal directly so there is ZERO blank delay
       setAiScanResult({
         mealDetected: name,
         calories: scan?.calories || 642,
@@ -364,10 +387,17 @@ export default function HomeScreen() {
         ]
       });
       setAiModalOpen(true);
+      
+      // Smoothly dismiss the scanning overlay after result is mounted
+      setTimeout(() => {
+        setIsAiScanning(false);
+      }, 100);
     } catch (error: any) {
       setIsAiScanning(false);
       console.error(error);
-      Alert.alert('Lỗi', 'Có lỗi xảy ra khi sử dụng camera.');
+      setTimeout(() => {
+        Alert.alert('Thông báo', 'Không thể hoàn tất quét món ăn. Vui lòng thử lại.');
+      }, 350);
     }
   };
 
@@ -431,7 +461,7 @@ export default function HomeScreen() {
                 <Text style={[styles.headerGreetingName, { color: theme.text }]}>{userProfile.firstName || 'Người dùng'}</Text>
               </View>
             </View>
-            <Text style={styles.headerAppTitle}>SỨC MẠNH VIỆT</Text>
+            <Text style={styles.headerAppTitle}>BODYFIT GYM & NUTRI 🏋️‍♂️</Text>
             <Pressable onPress={() => router.push('/notifications')} style={styles.bellBtn}>
               <Animated.View style={{ transform: [{ rotate: bellInterpolation }] }}>
                 <Ionicons name="notifications-outline" size={22} color={theme.text} />
@@ -501,7 +531,7 @@ export default function HomeScreen() {
             {/* Đạm */}
             <View style={[styles.macroCardItem, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
               <View style={[styles.macroAccentBar, { backgroundColor: '#FFD700' }]} />
-              <Text style={[styles.macroCardLabel, { color: theme.textMuted }]}>Đạm</Text>
+              <Text style={[styles.macroCardLabel, { color: theme.textMuted }]}>Đạm 🥩</Text>
               <Text style={[styles.macroCardVal, { color: theme.text }]}>{protein}g</Text>
               <View style={styles.macroProgressBarTrack}>
                 <View style={[styles.macroProgressBarFill, { width: `${Math.min(100, (protein / targetProtein) * 100)}%`, backgroundColor: '#FFD700' }]} />
@@ -511,7 +541,7 @@ export default function HomeScreen() {
             {/* Tinh bột */}
             <View style={[styles.macroCardItem, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
               <View style={[styles.macroAccentBar, { backgroundColor: '#FF9F1C' }]} />
-              <Text style={[styles.macroCardLabel, { color: theme.textMuted }]}>Tinh bột</Text>
+              <Text style={[styles.macroCardLabel, { color: theme.textMuted }]}>Carbs 🍠</Text>
               <Text style={[styles.macroCardVal, { color: theme.text }]}>{carbs}g</Text>
               <View style={styles.macroProgressBarTrack}>
                 <View style={[styles.macroProgressBarFill, { width: `${Math.min(100, (carbs / targetCarbs) * 100)}%`, backgroundColor: '#FF9F1C' }]} />
@@ -521,7 +551,7 @@ export default function HomeScreen() {
             {/* Béo */}
             <View style={[styles.macroCardItem, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
               <View style={[styles.macroAccentBar, { backgroundColor: '#FF5E36' }]} />
-              <Text style={[styles.macroCardLabel, { color: theme.textMuted }]}>Béo</Text>
+              <Text style={[styles.macroCardLabel, { color: theme.textMuted }]}>Béo 🥑</Text>
               <Text style={[styles.macroCardVal, { color: theme.text }]}>{fat}g</Text>
               <View style={styles.macroProgressBarTrack}>
                 <View style={[styles.macroProgressBarFill, { width: `${Math.min(100, (fat / targetFat) * 100)}%`, backgroundColor: '#FF5E36' }]} />
@@ -541,7 +571,7 @@ export default function HomeScreen() {
                   </Pressable>
                 </Animated.View>
               </View>
-              <Text style={[styles.metricCardLabel, { color: theme.textMuted, marginTop: 12 }]}>Nước uống</Text>
+              <Text style={[styles.metricCardLabel, { color: theme.textMuted, marginTop: 12 }]}>Nước Hydrate 💧</Text>
               <Text style={[styles.metricCardValue, { color: theme.text }]}>
                 {(water / 1000).toFixed(1)} <Text style={[styles.metricCardUnit, { color: theme.textMuted }]}>Lít / {(targetWater / 1000).toFixed(1)}L</Text>
               </Text>
@@ -552,7 +582,7 @@ export default function HomeScreen() {
               <View style={styles.metricCardHeader}>
                 <Ionicons name="walk" size={22} color="#FFD700" />
               </View>
-              <Text style={[styles.metricCardLabel, { color: theme.textMuted, marginTop: 12 }]}>Số bước chân</Text>
+              <Text style={[styles.metricCardLabel, { color: theme.textMuted, marginTop: 12 }]}>Số bước Cardio</Text>
               <Text style={[styles.metricCardValue, { color: theme.text }]}>{stepsVal.toLocaleString('vi-VN')}</Text>
               <Text style={[styles.metricCardSubText, { color: theme.textMuted }]}>
                 <Ionicons name="trending-up" size={12} color={theme.success} /> {Math.round((stepsVal / 10000) * 100)}% mục tiêu
@@ -569,9 +599,9 @@ export default function HomeScreen() {
                 </View>
               </Animated.View>
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={[styles.adviceCardLabel, { color: theme.textMuted }]}>Lời khuyên hôm nay</Text>
+                <Text style={[styles.adviceCardLabel, { color: theme.textMuted }]}>Mẹo Gymer & Dinh dưỡng 🏋️‍♂️</Text>
                 <Text style={[styles.adviceCardContent, { color: theme.textSecondary }]}>
-                  "Sức mạnh không đến từ những gì bạn có thể làm, nó đến từ việc vượt qua những điều bạn từng nghĩ mình không thể."
+                  "Dinh dưỡng chuẩn chiếm 70% kết quả! Nạp 25 - 35g đạm trong vòng 30 phút sau khi tập Gym để cơ bắp hồi phục và tăng trưởng tối đa."
                 </Text>
               </View>
             </View>
@@ -579,22 +609,22 @@ export default function HomeScreen() {
 
           {/* Start workout button */}
           <Animated.View style={{ transform: [{ scale: pulseAnim }], width: '100%' }}>
-            <Pressable onPress={() => router.replace('/workout')} style={styles.startWorkoutRedesignedBtn}>
+            <Pressable onPress={() => setActiveTabRoute('/workout')} style={styles.startWorkoutRedesignedBtn}>
               <LinearGradient 
                 colors={Gradients.primary} 
                 start={{ x: 0, y: 0 }} 
                 end={{ x: 1, y: 0 }} 
                 style={styles.startWorkoutRedesignedBtnGradient}
               >
-                <Ionicons name="play-circle" size={20} color="#100E0C" style={{ marginRight: 6 }} />
-                <Text style={styles.startWorkoutRedesignedBtnText}>BẮT ĐẦU TẬP LUYỆN</Text>
+                <Ionicons name="barbell" size={22} color="#100E0C" style={{ marginRight: 8 }} />
+                <Text style={styles.startWorkoutRedesignedBtnText}>VÀO PHÒNG TẬP GYM NGAY</Text>
               </LinearGradient>
             </Pressable>
           </Animated.View>
 
           {/* Quick Actions Grid */}
           <View style={styles.sectionHeaderWrap}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>⚡ Các tính năng & Thao tác nhanh</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>⚡ Lối tắt Gymer & Thực đơn AI</Text>
           </View>
           <View style={styles.quickActionsContainer}>
             <Pressable onPress={() => runScan()} style={[styles.quickActionCardCompl, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
@@ -615,7 +645,7 @@ export default function HomeScreen() {
                 <Text style={[styles.quickActionComplDesc, { color: theme.textMuted }]}>Nhập calo, đạm...</Text>
               </View>
             </Pressable>
-            <Pressable onPress={() => router.replace('/journal')} style={[styles.quickActionCardCompl, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            <Pressable onPress={() => router.push('/declare')} style={[styles.quickActionCardCompl, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
               <View style={styles.quickActionIconCircle}>
                 <Text style={{ fontSize: 16 }}>🏃‍♂️</Text>
               </View>
@@ -624,7 +654,7 @@ export default function HomeScreen() {
                 <Text style={[styles.quickActionComplDesc, { color: theme.textMuted }]}>Ghi nhận tập luyện</Text>
               </View>
             </Pressable>
-            <Pressable onPress={() => router.replace('/coach')} style={[styles.quickActionCardCompl, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+            <Pressable onPress={() => setActiveTabRoute('/coach')} style={[styles.quickActionCardCompl, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
               <View style={styles.quickActionIconCircle}>
                 <Text style={{ fontSize: 16 }}>🤖</Text>
               </View>
@@ -984,6 +1014,39 @@ export default function HomeScreen() {
                   style={[styles.modalNumberInput, { color: theme.text }]}
                 />
               </View>
+              <View style={styles.modalFormItem}>
+                <Text style={[styles.modalFieldLabelText, { color: theme.text }]}>Chất xơ (Fiber g)</Text>
+                <TextInput
+                  value={mFiber}
+                  onChangeText={setMFiber}
+                  placeholder="4"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="numeric"
+                  style={[styles.modalNumberInput, { color: theme.text }]}
+                />
+              </View>
+              <View style={styles.modalFormItem}>
+                <Text style={[styles.modalFieldLabelText, { color: theme.text }]}>Đường (Sugar g)</Text>
+                <TextInput
+                  value={mSugar}
+                  onChangeText={setMSugar}
+                  placeholder="6"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="numeric"
+                  style={[styles.modalNumberInput, { color: theme.text }]}
+                />
+              </View>
+              <View style={styles.modalFormItem}>
+                <Text style={[styles.modalFieldLabelText, { color: theme.text }]}>Natri (Sodium mg)</Text>
+                <TextInput
+                  value={mSodium}
+                  onChangeText={setMSodium}
+                  placeholder="350"
+                  placeholderTextColor={theme.textMuted}
+                  keyboardType="numeric"
+                  style={[styles.modalNumberInput, { color: theme.text }]}
+                />
+              </View>
             </View>
 
             <Pressable onPress={handleSaveManualFoodLog} style={[styles.modalSaveBtn, { backgroundColor: theme.primary }]}>
@@ -1006,22 +1069,47 @@ export default function HomeScreen() {
 
             {aiScanResult && (
               <>
-                <Text style={[styles.aiFoodNameText, { color: theme.text }]}>{aiScanResult.mealDetected}</Text>
+                <TextInput
+                  value={aiScanResult.mealDetected}
+                  onChangeText={(txt) => setAiScanResult({ ...aiScanResult, mealDetected: txt })}
+                  style={[styles.aiFoodNameText, { color: theme.text, backgroundColor: 'rgba(255, 255, 255, 0.04)', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 10 }]}
+                  placeholder="Tên món ăn"
+                  placeholderTextColor={theme.textMuted}
+                />
 
                 <View style={styles.aiMacrosRow}>
                   <View style={[styles.aiMacroPill, { borderColor: theme.primary }]}>
-                    <Text style={[styles.aiMacroPillLabel, { color: theme.textMuted }]}>Calo</Text>
-                    <Text style={[styles.aiMacroPillVal, { color: theme.primary }]}>{aiScanResult.calories} kcal</Text>
+                    <Text style={[styles.aiMacroPillLabel, { color: theme.textMuted }]}>Calo (kcal)</Text>
+                    <TextInput
+                      value={String(aiScanResult.calories)}
+                      onChangeText={(txt) => setAiScanResult({ ...aiScanResult, calories: parseInt(txt) || 0 })}
+                      keyboardType="numeric"
+                      style={[styles.aiMacroPillVal, { color: theme.primary, textAlign: 'center', minWidth: 60, paddingVertical: 2 }]}
+                    />
                   </View>
                   <View style={[styles.aiMacroPill, { borderColor: '#FFD700' }]}>
-                    <Text style={[styles.aiMacroPillLabel, { color: theme.textMuted }]}>Đạm</Text>
-                    <Text style={[styles.aiMacroPillVal, { color: '#FFD700' }]}>{aiScanResult.protein}g</Text>
+                    <Text style={[styles.aiMacroPillLabel, { color: theme.textMuted }]}>Đạm (g)</Text>
+                    <TextInput
+                      value={String(aiScanResult.protein)}
+                      onChangeText={(txt) => setAiScanResult({ ...aiScanResult, protein: parseFloat(txt) || 0 })}
+                      keyboardType="numeric"
+                      style={[styles.aiMacroPillVal, { color: '#FFD700', textAlign: 'center', minWidth: 50, paddingVertical: 2 }]}
+                    />
                   </View>
                   <View style={[styles.aiMacroPill, { borderColor: '#FF5E36' }]}>
-                    <Text style={[styles.aiMacroPillLabel, { color: theme.textMuted }]}>Carb</Text>
-                    <Text style={[styles.aiMacroPillVal, { color: '#FF5E36' }]}>{aiScanResult.carbs}g</Text>
+                    <Text style={[styles.aiMacroPillLabel, { color: theme.textMuted }]}>Carb (g)</Text>
+                    <TextInput
+                      value={String(aiScanResult.carbs)}
+                      onChangeText={(txt) => setAiScanResult({ ...aiScanResult, carbs: parseFloat(txt) || 0 })}
+                      keyboardType="numeric"
+                      style={[styles.aiMacroPillVal, { color: '#FF5E36', textAlign: 'center', minWidth: 50, paddingVertical: 2 }]}
+                    />
                   </View>
                 </View>
+
+                <Text style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', marginTop: 2 }}>
+                  💡 Bấm trực tiếp vào các ô số trên để chỉnh sửa nhanh theo bao bì
+                </Text>
 
                 <Text style={[styles.aiComponentLabel, { color: theme.text }]}>Chi tiết thành phần:</Text>
                 <View style={styles.aiComponentList}>
@@ -1047,7 +1135,10 @@ export default function HomeScreen() {
       </Modal>
 
       {/* AI Food Scanning Loading Indicator Modal */}
-      <AiScanningModal visible={isAiScanning} />
+      <AiScanningModal
+        visible={isAiScanning}
+        onCancel={() => setIsAiScanning(false)}
+      />
       {/* Web Mobile Feature Alert Modal */}
       <MobileFeatureModal visible={webFeatureModalOpen} onClose={() => setWebFeatureModalOpen(false)} />
       {/* Onboarding Profile Setup Modal */}

@@ -1,6 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Modal,
   View,
   Text,
   StyleSheet,
@@ -22,19 +21,72 @@ interface AiScanningModalProps {
 
 export const AiScanningModal: React.FC<AiScanningModalProps> = ({
   visible,
-  title = 'AI đang quét món ăn...',
-  subtitle = 'Đang phân tích hình ảnh và tính toán lượng calo, chất đạm, carb, chất béo',
+  title = 'AI đang phân tích món ăn...',
+  subtitle = 'Hệ thống AI thị giác đang quét hình ảnh để nhận diện món ăn & dinh dưỡng',
   statusMessage,
   onCancel,
 }) => {
   const { theme, isDark } = useAppTheme();
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Real-time progress stages
+  const getProgressInfo = (sec: number) => {
+    if (sec < 3) {
+      return {
+        step: 1,
+        text: 'Đang tải ảnh và kết nối AI thị giác... 📡',
+        sub: 'Khởi tạo luồng xử lý thị giác máy tính',
+      };
+    } else if (sec < 7) {
+      return {
+        step: 2,
+        text: 'AI đang nhận diện món ăn & nguyên liệu... 🍲',
+        sub: 'Trích xuất đặc trưng hình ảnh & phân loại món',
+      };
+    } else if (sec < 13) {
+      return {
+        step: 3,
+        text: 'Đang tính toán calo, đạm, carb, chất béo... 🥗',
+        sub: 'Ước lượng khối lượng (g) & bảng thành phần',
+      };
+    } else {
+      return {
+        step: 4,
+        text: 'Sắp xong! Đang tổng hợp kết quả chi tiết... ✨',
+        sub: 'Hoàn thiện hồ sơ dinh dưỡng cho bạn',
+      };
+    }
+  };
 
   useEffect(() => {
     if (visible) {
+      setElapsedSeconds(0);
+
+      // Fade in smoothly
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+
+      // Tick seconds timer for progressive updates
+      const ticker = setInterval(() => {
+        setElapsedSeconds((prev) => prev + 1);
+      }, 1000);
+
+      // Safety timeout: only auto-dismiss if stalled after 60s (not 12s)
+      const safetyTimer = setTimeout(() => {
+        if (onCancel) {
+          console.warn('AiScanningModal safety timeout reached after 60s');
+          onCancel();
+        }
+      }, 60000);
+
       // Pulse animation for outer ring glow
       const pulseLoop = Animated.loop(
         Animated.sequence([
@@ -57,7 +109,7 @@ export const AiScanningModal: React.FC<AiScanningModalProps> = ({
       const rotateLoop = Animated.loop(
         Animated.timing(rotateAnim, {
           toValue: 1,
-          duration: 4000,
+          duration: 3500,
           easing: Easing.linear,
           useNativeDriver: true,
         })
@@ -67,28 +119,30 @@ export const AiScanningModal: React.FC<AiScanningModalProps> = ({
       rotateLoop.start();
 
       return () => {
+        clearInterval(ticker);
+        clearTimeout(safetyTimer);
         pulseLoop.stop();
         rotateLoop.stop();
       };
     } else {
+      fadeAnim.setValue(0);
       pulseAnim.setValue(1);
       rotateAnim.setValue(0);
+      setElapsedSeconds(0);
     }
-  }, [visible, pulseAnim, rotateAnim]);
+  }, [visible, pulseAnim, rotateAnim, fadeAnim, onCancel]);
+
+  if (!visible) return null;
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
+  const currentProgress = getProgressInfo(elapsedSeconds);
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      hardwareAccelerated
-      onRequestClose={onCancel}
-    >
+    <Animated.View style={[StyleSheet.absoluteFill, styles.overlay, { opacity: fadeAnim }]}>
       <View style={styles.backdrop}>
         <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
           {/* Animated AI Scanning Icon */}
@@ -118,9 +172,31 @@ export const AiScanningModal: React.FC<AiScanningModalProps> = ({
 
           {/* Title & Subtitle */}
           <Text style={[styles.titleText, { color: theme.text }]}>{title}</Text>
-          <Text style={[styles.subtitleText, { color: theme.textMuted }]}>{subtitle}</Text>
+          <Text style={[styles.subtitleText, { color: theme.textMuted }]}>
+            {currentProgress.sub}
+          </Text>
 
-          {/* Activity / Status Box */}
+          {/* Progress Steps Dots */}
+          <View style={styles.stepsRow}>
+            {[1, 2, 3, 4].map((stepIdx) => {
+              const isActive = stepIdx <= currentProgress.step;
+              const isCurrent = stepIdx === currentProgress.step;
+              return (
+                <View
+                  key={stepIdx}
+                  style={[
+                    styles.stepDot,
+                    {
+                      backgroundColor: isActive ? theme.primary : 'rgba(255, 255, 255, 0.15)',
+                      width: isCurrent ? 24 : 8,
+                    },
+                  ]}
+                />
+              );
+            })}
+          </View>
+
+          {/* Activity / Dynamic Status Box */}
           <View
             style={[
               styles.statusBox,
@@ -132,9 +208,14 @@ export const AiScanningModal: React.FC<AiScanningModalProps> = ({
           >
             <ActivityIndicator size="small" color={theme.primary} style={{ marginRight: 10 }} />
             <Text style={[styles.statusText, { color: theme.primary }]}>
-              {statusMessage || 'AI đang nhận diện dữ liệu... ⏳'}
+              {statusMessage || currentProgress.text}
             </Text>
           </View>
+
+          {/* Elapsed Timer Counter */}
+          <Text style={[styles.timerText, { color: theme.textMuted }]}>
+            Đang phân tích: {elapsedSeconds}s (AI sẽ tự động hiện kết quả ngay)
+          </Text>
 
           {onCancel && (
             <Pressable onPress={onCancel} style={styles.cancelBtn}>
@@ -143,38 +224,42 @@ export const AiScanningModal: React.FC<AiScanningModalProps> = ({
           )}
         </View>
       </View>
-    </Modal>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
+  overlay: {
+    zIndex: 99999,
+    elevation: 99999,
+  },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   card: {
     width: '100%',
-    maxWidth: 340,
+    maxWidth: 350,
     borderRadius: 24,
     paddingVertical: 28,
     paddingHorizontal: 20,
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 1.2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 12,
   },
   iconContainer: {
     width: 90,
     height: 90,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 18,
     position: 'relative',
   },
   pulseRing: {
@@ -205,36 +290,56 @@ const styles = StyleSheet.create({
   },
   titleText: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitleText: {
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 20,
+    lineHeight: 17,
+    marginBottom: 16,
     paddingHorizontal: 8,
+  },
+  stepsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 16,
+  },
+  stepDot: {
+    height: 6,
+    borderRadius: 3,
   },
   statusBox: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 30,
     borderWidth: 1,
+    width: '100%',
+    justifyContent: 'center',
   },
   statusText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12.5,
+    fontWeight: '700',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  timerText: {
+    fontSize: 11,
+    marginTop: 12,
+    fontWeight: '500',
   },
   cancelBtn: {
-    marginTop: 16,
+    marginTop: 10,
     paddingVertical: 8,
     paddingHorizontal: 16,
   },
   cancelBtnText: {
-    fontSize: 13,
+    fontSize: 12.5,
     textDecorationLine: 'underline',
   },
 });

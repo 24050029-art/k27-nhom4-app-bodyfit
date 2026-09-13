@@ -278,7 +278,9 @@ export default function DeclareScreen() {
 
               <View style={styles.formGrid}>
                 <View style={styles.formCol}>
-                  <Text style={styles.formLabel}>Số bước chân</Text>
+                  <Text style={styles.formLabel}>
+                    Số bước chân {declSteps && Number(declSteps) > 0 ? `(~${(Number(declSteps) * 0.00075).toFixed(2)} km)` : ''}
+                  </Text>
                   <TextInput
                     placeholder="Ví dụ: 10000"
                     keyboardType="numeric"
@@ -431,7 +433,7 @@ export default function DeclareScreen() {
                           </Text>
                           
                           <Text style={{ fontSize: 10, marginTop: 4, color: 'rgba(255, 248, 231, 0.5)', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
-                            {decl.steps} bước • {decl.activeCalories} kcal • {decl.activeTime} phút
+                            {decl.steps} bước (~{(Number(decl.steps || 0) * 0.00075).toFixed(2)} km) • {decl.activeCalories} kcal • {decl.activeTime} phút
                           </Text>
                         </View>
                         

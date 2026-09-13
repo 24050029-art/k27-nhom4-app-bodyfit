@@ -11,6 +11,7 @@ import { useLocalDb, FoodLog } from '@/hooks/use-local-db';
 import { getLocalDateString } from '@/utils/date';
 import { AiScanningModal } from '@/components/AiScanningModal';
 import { MobileFeatureModal } from '@/components/MobileFeatureModal';
+import DonutMacroChart from '@/components/donut-macro-chart';
 
 const PRESET_IMAGES = [
   { id: 'gym', label: 'Tập Gym 🏋️‍♂️', url: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80' },
@@ -189,6 +190,12 @@ export default function JournalScreen() {
   }, [weightLogs, selectedDate]);
 
   const foodCal = currentFoods.reduce((sum, item) => sum + (item.calories || 0), 0);
+  const totalProtein = currentFoods.reduce((sum, item) => sum + (item.protein || 0), 0);
+  const totalCarbs = currentFoods.reduce((sum, item) => sum + (item.carbs || 0), 0);
+  const totalFat = currentFoods.reduce((sum, item) => sum + (item.fat || 0), 0);
+  const totalFiber = currentFoods.reduce((sum, item) => sum + (item.fiber || 0), 0);
+  const totalSugar = currentFoods.reduce((sum, item) => sum + (item.sugar || 0), 0);
+  const totalSodium = currentFoods.reduce((sum, item) => sum + (item.sodium || 0), 0);
   const waterMl = currentWater.reduce((sum, item) => sum + (item.amountMl || 0), 0);
   const targetWater = userProfile?.targetWaterMl || 3000;
   
@@ -273,35 +280,50 @@ export default function JournalScreen() {
       setWebFeatureModalOpen(true);
       return;
     }
-    // 1. Request camera permission
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Quyền truy cập', 'Ứng dụng cần quyền sử dụng camera để chụp ảnh món ăn của bạn.');
-      return;
-    }
 
-    // 2. Launch Camera
     try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Quyền truy cập', 'Ứng dụng cần quyền sử dụng camera để chụp ảnh món ăn của bạn.');
+        return;
+      }
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        quality: 0.8,
-        base64: true,
+        quality: 0.7,
       });
 
       if (result.canceled || !result.assets || !result.assets[0]) {
         return;
       }
 
-      const base64Data = result.assets[0].base64;
-      if (!base64Data) {
-        Alert.alert('Lỗi', 'Không thể lấy dữ liệu ảnh từ camera.');
-        return;
-      }
-
+      // Show scanning modal and status
       setIsAiScanning(true);
       setBusy(true);
       setStatus('AI đang phân tích món ăn từ ảnh chụp...');
+
+      // Compress and resize image to prevent memory spikes and bridge freezing
+      let base64Data: string | undefined;
+      try {
+        const ImageManipulator = require('expo-image-manipulator');
+        const manipResult = await ImageManipulator.manipulateAsync(
+          result.assets[0].uri,
+          [{ resize: { width: 600 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        base64Data = manipResult.base64;
+      } catch (manipErr) {
+        console.warn('ImageManipulator fallback in journal:', manipErr);
+        base64Data = result.assets[0].base64 ?? undefined;
+      }
+
+      if (!base64Data) {
+        setIsAiScanning(false);
+        setBusy(false);
+        Alert.alert('Lỗi', 'Không thể xử lý hình ảnh món ăn.');
+        return;
+      }
 
       let scan;
       try {
@@ -317,8 +339,11 @@ export default function JournalScreen() {
         };
       }
 
-      const name = scan?.mealDetected || 'Món ăn quét bằng AI';
+      // CRITICAL: Dismiss modal FIRST before showing alert
+      setIsAiScanning(false);
+      setBusy(false);
 
+      const name = scan?.mealDetected || 'Món ăn quét bằng AI';
       const hour = new Date().getHours();
       let defaultMeal: 'breakfast' | 'lunch' | 'dinner' | 'snack' = 'lunch';
       if (hour >= 5 && hour < 11) defaultMeal = 'breakfast';
@@ -326,27 +351,35 @@ export default function JournalScreen() {
       else if (hour >= 14 && hour < 18) defaultMeal = 'snack';
       else defaultMeal = 'dinner';
 
-      await addFoodLog(defaultMeal, name, 350, scan?.calories || 642, scan?.protein || 32, scan?.carbs || 78, scan?.fat || 18, selectedDate);
-      setStatus(`Quét AI thành công: Đã ghi nhận ${name} (${scan?.calories} kcal)`);
-      Alert.alert(
-        'Quét món ăn thành công 📸',
-        `AI phát hiện: ${name}\n- Năng lượng: ${scan?.calories} kcal\n- Đạm: ${scan?.protein}g\n- Tinh bột: ${scan?.carbs}g\n- Béo: ${scan?.fat}g`,
-        [{ text: 'Đồng ý', style: 'default' }]
+      await addFoodLog(
+        defaultMeal,
+        name,
+        350,
+        scan?.calories || 642,
+        scan?.protein || 32,
+        scan?.carbs || 78,
+        scan?.fat || 18,
+        selectedDate
       );
+      setStatus(`Quét AI thành công: Đã ghi nhận ${name} (${scan?.calories || 642} kcal)`);
+
+      // Allow 350ms for modal dismissal before presenting native alert
+      setTimeout(() => {
+        Alert.alert(
+          'Quét món ăn thành công 📸',
+          `AI đã nhận diện: ${name}\n• Calo: ${scan?.calories || 642} kcal\n• Đạm: ${scan?.protein || 32}g\n• Tinh bột: ${scan?.carbs || 78}g\n• Chất béo: ${scan?.fat || 18}g\n\nĐã tự động thêm vào nhật ký hôm nay!`,
+          [{ text: 'Đồng ý', style: 'default' }]
+        );
+      }, 350);
     } catch (error: any) {
       console.error(error);
-      Alert.alert('Lỗi', 'Có lỗi xảy ra khi sử dụng camera.');
-    } finally {
       setIsAiScanning(false);
       setBusy(false);
+      setTimeout(() => {
+        Alert.alert('Thông báo', 'Không thể hoàn tất quét món ăn. Vui lòng thử lại.');
+      }, 350);
     }
   }, [addFoodLog, selectedDate, triggerMockScanFood]);
-
-  useEffect(() => {
-    if (!shouldTriggerScan) return;
-    setShouldTriggerScan(false);
-    runScan();
-  }, [runScan, setShouldTriggerScan, shouldTriggerScan]);
 
   const addQuickWater = async (ml: number) => {
     await addWaterLog(ml, selectedDate);
@@ -505,6 +538,21 @@ export default function JournalScreen() {
                 </View>
               </View>
 
+              {/* LTAPP-34: Biểu đồ tròn Calo & Phân bổ Macros theo ngày */}
+              <View style={{ marginVertical: 8, alignItems: 'center' }}>
+                <DonutMacroChart
+                  proteinG={totalProtein}
+                  carbsG={totalCarbs}
+                  fatG={totalFat}
+                  consumedCalories={foodCal}
+                  targetCalories={userProfile?.targetCalories || 2200}
+                  size={175}
+                  strokeWidth={18}
+                  textColor={theme.text}
+                  subTextColor={theme.textMuted}
+                />
+              </View>
+
               {/* AI Review Button */}
               <Pressable onPress={runReview} style={styles.aiReviewBtn}>
                 <Text style={styles.aiReviewBtnText}>
@@ -571,6 +619,7 @@ export default function JournalScreen() {
                               <Text style={[styles.foodLogItemName, { color: theme.text }]}>{item.foodName}</Text>
                               <Text style={[styles.foodLogItemMacros, { color: theme.textMuted }]}>
                                 {item.servingSizeG}g • P: {item.protein}g • C: {item.carbs}g • F: {item.fat}g
+                                {item.fiber ? ` • Xơ: ${item.fiber}g` : ''}
                               </Text>
                             </View>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -586,6 +635,53 @@ export default function JournalScreen() {
                   </View>
                 );
               })}
+            </View>
+
+            {/* LTAPP-33: Theo dõi vi chất dinh dưỡng (Chất xơ, Đường, Natri) */}
+            <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>Vi chất dinh dưỡng (Micronutrients) 🔬</Text>
+                <Text style={{ fontSize: 11, color: theme.textMuted }}>Chuẩn y tế</Text>
+              </View>
+
+              {/* Chất xơ */}
+              <View style={styles.progressBlock}>
+                <View style={styles.progressLabelRow}>
+                  <Text style={styles.progressLabel}>🌾 Chất xơ (Fiber)</Text>
+                  <Text style={[styles.progressValueText, { color: totalFiber >= 25 ? '#10B981' : theme.text }]}>
+                    {totalFiber}g / 30g mục tiêu
+                  </Text>
+                </View>
+                <View style={styles.progressBarTrack}>
+                  <View style={[styles.progressBarFillGreen, { width: `${Math.min(100, (totalFiber / 30) * 100)}%`, backgroundColor: '#10B981' }]} />
+                </View>
+              </View>
+
+              {/* Đường */}
+              <View style={styles.progressBlock}>
+                <View style={styles.progressLabelRow}>
+                  <Text style={styles.progressLabel}>🍬 Đường (Sugar)</Text>
+                  <Text style={[styles.progressValueText, { color: totalSugar > 50 ? '#EF4444' : theme.text }]}>
+                    {totalSugar}g / tối đa 50g
+                  </Text>
+                </View>
+                <View style={styles.progressBarTrack}>
+                  <View style={[styles.progressBarFillOrange, { width: `${Math.min(100, (totalSugar / 50) * 100)}%`, backgroundColor: totalSugar > 50 ? '#EF4444' : '#F59E0B' }]} />
+                </View>
+              </View>
+
+              {/* Natri */}
+              <View style={styles.progressBlock}>
+                <View style={styles.progressLabelRow}>
+                  <Text style={styles.progressLabel}>🧂 Natri (Sodium)</Text>
+                  <Text style={[styles.progressValueText, { color: totalSodium > 2300 ? '#EF4444' : theme.text }]}>
+                    {totalSodium}mg / tối đa 2,300mg
+                  </Text>
+                </View>
+                <View style={styles.progressBarTrack}>
+                  <View style={[styles.progressBarFillBlue, { width: `${Math.min(100, (totalSodium / 2300) * 100)}%`, backgroundColor: totalSodium > 2300 ? '#EF4444' : '#38BDF8' }]} />
+                </View>
+              </View>
             </View>
 
             {/* Section 3: Theo dõi nước uống */}
@@ -655,11 +751,13 @@ export default function JournalScreen() {
                 <Ionicons name="watch-outline" size={18} color="#FFF8E7" />
               </View>
 
-              {/* Steps Progress */}
+              {/* Steps & Distance Progress (LTAPP-70) */}
               <View style={styles.progressBlock}>
                 <View style={styles.progressLabelRow}>
-                  <Text style={styles.progressLabel}>🏃‍♂️ Số bước đi</Text>
-                  <Text style={styles.progressValueText}>{stepsVal} / 10,000 bước</Text>
+                  <Text style={styles.progressLabel}>🏃‍♂️ Số bước đi & Quãng đường</Text>
+                  <Text style={styles.progressValueText}>
+                    {stepsVal.toLocaleString()} bước • ~{(stepsVal * 0.00075).toFixed(2)} km
+                  </Text>
                 </View>
                 <View style={styles.progressBarTrack}>
                   <View style={[styles.progressBarFillGreen, { width: `${Math.min(100, (stepsVal / 10000) * 100)}%` }]} />
@@ -1093,7 +1191,13 @@ export default function JournalScreen() {
       </Modal>
 
       {/* AI Scanning Modal */}
-      <AiScanningModal visible={isAiScanning} />
+      <AiScanningModal
+        visible={isAiScanning}
+        onCancel={() => {
+          setIsAiScanning(false);
+          setBusy(false);
+        }}
+      />
       {/* Web Mobile Feature Alert Modal */}
       <MobileFeatureModal visible={webFeatureModalOpen} onClose={() => setWebFeatureModalOpen(false)} />
     </View>
