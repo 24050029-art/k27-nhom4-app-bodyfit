@@ -91,7 +91,6 @@ export default function BmiGaugeChart({
             fill="none"
             stroke="#38BDF8"
             strokeWidth={strokeWidth}
-            strokeLinecap="round"
           />
 
           {/* Segment 2: Chuẩn (18.5 - 24.9) #10B981 */}
@@ -116,7 +115,6 @@ export default function BmiGaugeChart({
             fill="none"
             stroke="#EF4444"
             strokeWidth={strokeWidth}
-            strokeLinecap="round"
           />
 
           {/* Scale labels */}
