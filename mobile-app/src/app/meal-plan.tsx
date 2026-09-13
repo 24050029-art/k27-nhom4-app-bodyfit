@@ -129,7 +129,7 @@ export default function MealPlanScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <LinearGradient colors={['#0F0D0B', '#171411', '#0A0907']} style={StyleSheet.absoluteFillObject} />
+      <LinearGradient colors={['#0F0D0B', '#171411', '#0A0907']} style={StyleSheet.absoluteFill} />
       
       {/* Header */}
       <View style={styles.header}>

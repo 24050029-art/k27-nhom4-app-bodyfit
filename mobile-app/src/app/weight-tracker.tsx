@@ -172,7 +172,7 @@ export default function WeightTrackerScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
-      <LinearGradient colors={isDark ? ['#0F0D0B', '#171411', '#0A0907'] : ['#FAF7EF', '#FFFDF9', '#FAF7EF']} style={StyleSheet.absoluteFillObject} />
+      <LinearGradient colors={isDark ? ['#0F0D0B', '#171411', '#0A0907'] : ['#FAF7EF', '#FFFDF9', '#FAF7EF']} style={StyleSheet.absoluteFill} />
       
       {/* Header */}
       <View style={styles.header}>

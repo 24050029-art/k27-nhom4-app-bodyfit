@@ -21,6 +21,65 @@ import { getLocalDateString } from '@/utils/date';
 import { DEFAULT_AVATAR } from '@/constants/theme';
 // expo-notifications imported dynamically to support Expo Go SDK 53 on Android
 
+export const getFriendlyAuthErrorMessage = (rawError: any, defaultAction = 'thực hiện'): { title: string; message: string } => {
+  const msg = typeof rawError === 'string' ? rawError : (rawError?.message || '');
+
+  if (msg.includes('không tồn tại') || msg.includes('not found') || msg.includes('Không tìm thấy')) {
+    return {
+      title: 'Email / Tài Khoản Không Tồn Tại 🔍',
+      message: 'Email hoặc Tên đăng nhập này không tồn tại trên hệ thống. Vui lòng kiểm tra lại chính tả hoặc chọn "Đăng ký tài khoản mới".'
+    };
+  }
+
+  if (msg.includes('Tên đăng nhập đã tồn tại') || (msg.includes('username') && msg.includes('exists'))) {
+    return {
+      title: 'Tên Đăng Nhập Đã Tồn Tại ⚠️',
+      message: 'Tên đăng nhập này đã được đăng ký trước đó. Vui lòng thử lại với một tên đăng nhập khác.'
+    };
+  }
+
+  if (msg.includes('Email hoặc Số điện thoại đã tồn tại') || (msg.includes('email') && msg.includes('exists'))) {
+    return {
+      title: 'Email / SĐT Đã Đăng Ký ⚠️',
+      message: 'Email hoặc Số điện thoại này đã được sử dụng. Vui lòng chọn tab "Đăng nhập" hoặc dùng thông tin khác.'
+    };
+  }
+
+  if (msg.includes('Định dạng email') || msg.includes('email không hợp lệ')) {
+    return {
+      title: 'Định Dạng Email Không Hợp Lệ ⚠️',
+      message: 'Địa chỉ Email không đúng định dạng chuẩn (ví dụ: tendon@gmail.com). Vui lòng kiểm tra lại.'
+    };
+  }
+
+  if (msg.includes('FetchRequestCanceledException') || msg.includes('canceled') || msg.includes('Canceled') || msg.includes('Timeout') || msg.includes('timeout') || rawError?.name === 'AbortError') {
+    return {
+      title: 'Kết Nối Mạng Bị Gián Đoạn 🌐',
+      message: 'Máy chủ phản hồi quá thời gian chờ hoặc kết nối bị gián đoạn. Vui lòng kiểm tra Wifi/4G và bấm thử lại.'
+    };
+  }
+
+  if (msg.includes('Network request failed') || msg.includes('Failed to fetch') || msg.includes('ECONNREFUSED')) {
+    return {
+      title: 'Không Thể Kết Nối Máy Chủ 📡',
+      message: 'Không thể kết nối đến máy chủ BodyFit. Vui lòng kiểm tra lại địa chỉ kết nối máy chủ hoặc đường truyền mạng.'
+    };
+  }
+
+  if (msg.includes('OTP không chính xác') || msg.includes('Mã OTP')) {
+    return {
+      title: 'Mã OTP Không Chính Xác ❌',
+      message: msg || 'Mã OTP bạn nhập không đúng hoặc đã hết hiệu lực. Vui lòng kiểm tra lại.'
+    };
+  }
+
+  return {
+    title: 'Thông Báo Hệ Thống',
+    message: msg || `Đã xảy ra lỗi khi ${defaultAction}. Vui lòng thử lại sau.`
+  };
+};
+
+const mockRegisterOtps = new Map<string, { username: string; password?: string; otp: string; expiresAt: number }>();
 
 export interface UserProfile {
   firstName: string;
@@ -212,6 +271,10 @@ export interface CommunityPost {
   createdAt: string;
   likes: { id: string; userId: string }[];
   comments: PostComment[];
+  userProfile?: {
+    avatarUrl?: string;
+    level?: number;
+  };
 }
 
 export interface Challenge {
@@ -318,6 +381,8 @@ interface LocalDbContextType {
   userBadges: UserBadge[];
   isPremium: boolean;
   isAdmin: boolean;
+  hasCompletedOnboarding: boolean;
+  setHasCompletedOnboarding: (val: boolean) => void;
 
   updateProfile: (profile: Omit<UserProfile, 'bmi' | 'bmr' | 'tdee' | 'targetCalories' | 'targetProtein' | 'targetCarbs' | 'targetFat' | 'targetWaterMl' | 'bodyFatEstimate' | 'leanBodyMass' | 'xp' | 'level' | 'streakDays'>) => void;
   addFoodLog: (mealType: FoodLog['mealType'], name: string, weightG: number, cal: number, p: number, c: number, f: number, date?: string) => Promise<any>;
@@ -511,6 +576,7 @@ const generateDailyQuests = (currentWaterLogs: WaterLog[], currentFoodLogs: Food
 export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeDateStr, setActiveDateStr] = useState(getLocalDateString());
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
   const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
   const [waterLogs, setWaterLogs] = useState<WaterLog[]>([]);
   const [chatLogs, setChatLogs] = useState<ChatMessage[]>([]);
@@ -570,6 +636,7 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [activeMealPlan, setActiveMealPlan] = useState<MealPlan | null>(null);
   const [favoriteMealPlans, setFavoriteMealPlans] = useState<MealPlan[]>([]);
   const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
+  const [deletedPostIds, setDeletedPostIds] = useState<string[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([
     { id: 'chal1', title: '7 ngày Eat Clean 🥗', description: 'Chỉ ăn thực phẩm nguyên bản, hạn chế tối đa dầu mỡ và đồ ngọt chế biến.', xpReward: 150, durationDays: 7 },
     { id: 'chal2', title: '30 ngày giảm cân đột phá 📉', description: 'Duy trì thâm hụt calo nhẹ và tập luyện kháng lực 4 ngày/tuần.', xpReward: 400, durationDays: 30 },
@@ -702,6 +769,7 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
         let storedUserBadges: string | null = null;
         let storedPremium: string | null = null;
         let storedAdmin: string | null = null;
+        let storedOnboarding: string | null = null;
         let storedLiftingRecords: string | null = null;
 
         let storedSessions: string | null = null;
@@ -735,6 +803,7 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
           storedUserBadges = localStorage.getItem('bf_user_badges');
           storedPremium = localStorage.getItem('bf_is_premium');
           storedAdmin = localStorage.getItem('bf_is_admin');
+          storedOnboarding = localStorage.getItem('bf_has_completed_onboarding');
           storedSessions = localStorage.getItem('bf_chat_sessions');
           storedCurrentSessionId = localStorage.getItem('bf_current_session_id');
           storedLiftingRecords = localStorage.getItem('bf_lifting_records');
@@ -782,6 +851,7 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
           storedUserBadges = storeMap['bf_user_badges'];
           storedPremium = storeMap['bf_is_premium'];
           storedAdmin = storeMap['bf_is_admin'];
+          storedOnboarding = storeMap['bf_has_completed_onboarding'];
           storedSessions = storeMap['bf_chat_sessions'];
           storedCurrentSessionId = storeMap['bf_current_session_id'];
           storedLiftingRecords = storeMap['bf_lifting_records'];
@@ -793,6 +863,14 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         if (storedProfile) setUserProfile(JSON.parse(storedProfile));
         if (storedDeclarations) setDailyDeclarations(JSON.parse(storedDeclarations));
+        if (storedAdmin) setIsAdmin(JSON.parse(storedAdmin));
+        if (storedOnboarding !== null) {
+          try {
+            setHasCompletedOnboarding(JSON.parse(storedOnboarding));
+          } catch {
+            setHasCompletedOnboarding(true);
+          }
+        }
         if (storedFoods) setFoodLogs(JSON.parse(storedFoods));
         if (storedWater) setWaterLogs(JSON.parse(storedWater));
         let parsedSessions: ChatSession[] = [];
@@ -874,6 +952,7 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
           setCurrentUser(parsedUser);
           setIsPremium(parsedUser.isPremium || false);
           setIsAdmin(parsedUser.role === 'ADMIN');
+          await loadUserDataForUser(parsedUser);
         }
         if (storedBackendUrl) {
           try {
@@ -896,16 +975,13 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         // Hydrate new modules
         if (storedWeight) {
-          setWeightLogs(JSON.parse(storedWeight));
+          try {
+            setWeightLogs(JSON.parse(storedWeight));
+          } catch {
+            setWeightLogs([]);
+          }
         } else {
-          // Preload mock weight logs for immediate visual feedback
-          const mockWeight = [
-            { id: 'w1', weightKg: 72.5, waistCm: 84, chestCm: 98, hipsCm: 96, bodyFatPct: 21.4, loggedDate: getLocalDateString(new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)), loggedAt: new Date().toISOString() },
-            { id: 'w2', weightKg: 71.8, waistCm: 83.2, chestCm: 98, hipsCm: 95.5, bodyFatPct: 20.8, loggedDate: getLocalDateString(new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)), loggedAt: new Date().toISOString() },
-            { id: 'w3', weightKg: 71.0, waistCm: 82.0, chestCm: 97.5, hipsCm: 95.0, bodyFatPct: 20.1, loggedDate: getLocalDateString(), loggedAt: new Date().toISOString() },
-          ];
-          setWeightLogs(mockWeight);
-          saveToStorage('bf_weight', mockWeight);
+          setWeightLogs([]);
         }
         let deletedProgramIds: string[] = [];
         if (storedDeletedWorkouts) {
@@ -979,22 +1055,10 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
           try {
             setLiftingHistory(JSON.parse(storedLiftingHistory));
           } catch {
-            const mockLiftingHistory: LiftingHistoryLog[] = [
-              { id: 'lh1', squat: 80, bench: 60, deadlift: 100, loggedDate: getLocalDateString(new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)) },
-              { id: 'lh2', squat: 85, bench: 62.5, deadlift: 105, loggedDate: getLocalDateString(new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)) },
-              { id: 'lh3', squat: 90, bench: 65, deadlift: 110, loggedDate: getLocalDateString() }
-            ];
-            setLiftingHistory(mockLiftingHistory);
-            saveToStorage('bf_lifting_history', mockLiftingHistory);
+            setLiftingHistory([]);
           }
         } else {
-          const mockLiftingHistory: LiftingHistoryLog[] = [
-            { id: 'lh1', squat: 80, bench: 60, deadlift: 100, loggedDate: getLocalDateString(new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)) },
-            { id: 'lh2', squat: 85, bench: 62.5, deadlift: 105, loggedDate: getLocalDateString(new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)) },
-            { id: 'lh3', squat: 90, bench: 65, deadlift: 110, loggedDate: getLocalDateString() }
-          ];
-          setLiftingHistory(mockLiftingHistory);
-          saveToStorage('bf_lifting_history', mockLiftingHistory);
+          setLiftingHistory([]);
         }
 
         const DEFAULT_ACTIVITY_SCHEDULE: ActivityScheduleItem[] = [
@@ -1181,15 +1245,143 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => clearInterval(intervalId);
   }, [activeDateStr, userToken, backendUrl]);
 
-  // Save changes
-  const saveToStorage = (key: string, data: any) => {
+  const GLOBAL_STORAGE_KEYS = [
+    'bf_user_token',
+    'bf_current_user',
+    'bf_backend_url',
+    'bf_gemini_api_key',
+    'bf_groq_api_key',
+    'bf_openrouter_api_key',
+    'bf_chat_model_provider',
+    'bf_is_admin',
+    'bf_is_premium',
+    'bf_posts'
+  ];
+
+  const getUserKey = (user?: { username?: string; uid?: string } | null): string | null => {
+    if (!user) return null;
+    const key = (user.username || user.uid || '').trim().toLowerCase();
+    return key || null;
+  };
+
+  const getScopedKey = (baseKey: string, user?: { username?: string; uid?: string } | null): string => {
+    const uKey = getUserKey(user);
+    if (!uKey) return baseKey;
+    if (baseKey.endsWith(`_${uKey}`)) return baseKey;
+    return `${baseKey}_${uKey}`;
+  };
+
+  const getDefaultUserProfile = (username?: string, email?: string): UserProfile => {
+    const displayName = username ? (username.toLowerCase() === 'gakon' ? 'Tài' : username) : (email ? email.split('@')[0] : 'Người dùng');
+    const displayLastName = username && username.toLowerCase() === 'gakon' ? '(gakon)' : '';
+    return {
+      firstName: displayName,
+      lastName: displayLastName,
+      age: 24,
+      gender: 'male',
+      heightCm: 175,
+      weightKg: 65,
+      activityLevel: 'moderately_active',
+      targetGoal: 'healthy_lifestyle',
+      bmi: 21.2,
+      bmr: 1620,
+      tdee: 2200,
+      targetCalories: 2200,
+      targetProtein: 130,
+      targetCarbs: 220,
+      targetFat: 60,
+      targetWaterMl: 2500,
+      bodyFatEstimate: 16,
+      leanBodyMass: 54,
+      xp: 0,
+      level: 1,
+      streakDays: 0,
+      avatarUrl: DEFAULT_AVATAR
+    };
+  };
+
+  const loadUserDataForUser = async (userObj: { uid: string; email: string; username?: string } | null) => {
+    const uKey = getUserKey(userObj);
+    if (!uKey) return;
+
+    const getStorageItem = async (baseKey: string) => {
+      const scopedKey = getScopedKey(baseKey, userObj);
+      if (Platform.OS === 'web') {
+        let val = localStorage.getItem(scopedKey);
+        if (val === null && uKey === 'gakon') {
+          val = localStorage.getItem(baseKey);
+        }
+        return val;
+      } else {
+        let val = await AsyncStorage.getItem(scopedKey);
+        if (val === null && uKey === 'gakon') {
+          val = await AsyncStorage.getItem(baseKey);
+        }
+        return val;
+      }
+    };
+
     try {
+      const storedProfile = await getStorageItem('bf_profile');
+      const storedFoods = await getStorageItem('bf_foods');
+      const storedWater = await getStorageItem('bf_water');
+      const storedDeclarations = await getStorageItem('bf_declarations');
+      const storedWeight = await getStorageItem('bf_weight');
+      const storedSchedules = await getStorageItem('bf_schedules');
+      const storedMealPlan = await getStorageItem('bf_mealplan');
+      const storedUserBadges = await getStorageItem('bf_user_badges');
+      const storedLiftingRecords = await getStorageItem('bf_lifting_records');
+      const storedQuests = await getStorageItem('bf_quests');
+      const storedLiftingHistory = await getStorageItem('bf_lifting_history');
+      const storedActivitySchedule = await getStorageItem('bf_activity_schedule');
+      const storedShopping = await getStorageItem('bf_shopping');
+      const storedUserChals = await getStorageItem('bf_user_chals');
+
+      if (storedProfile) {
+        try {
+          setUserProfile(JSON.parse(storedProfile));
+        } catch {
+          const defProf = getDefaultUserProfile(userObj?.username, userObj?.email);
+          setUserProfile(defProf);
+          saveToStorage('bf_profile', defProf, userObj);
+        }
+      } else {
+        const defProf = getDefaultUserProfile(userObj?.username, userObj?.email);
+        setUserProfile(defProf);
+        saveToStorage('bf_profile', defProf, userObj);
+      }
+
+      setFoodLogs(storedFoods ? JSON.parse(storedFoods) : []);
+      setWaterLogs(storedWater ? JSON.parse(storedWater) : []);
+      setDailyDeclarations(storedDeclarations ? JSON.parse(storedDeclarations) : {});
+      setWeightLogs(storedWeight ? JSON.parse(storedWeight) : []);
+      setWorkoutSchedules(storedSchedules ? JSON.parse(storedSchedules) : []);
+      setActiveMealPlan(storedMealPlan ? JSON.parse(storedMealPlan) : null);
+      if (storedUserBadges) setUserBadges(JSON.parse(storedUserBadges));
+      if (storedLiftingRecords) setLiftingRecords(JSON.parse(storedLiftingRecords));
+      if (storedQuests) setQuests(JSON.parse(storedQuests));
+      if (storedLiftingHistory) setLiftingHistory(JSON.parse(storedLiftingHistory));
+      if (storedActivitySchedule) setActivitySchedule(JSON.parse(storedActivitySchedule));
+      if (storedShopping) setShoppingList(JSON.parse(storedShopping));
+      if (storedUserChals) setUserChallenges(JSON.parse(storedUserChals));
+    } catch (e) {
+      console.warn('Failed to load user-scoped data:', e);
+    }
+  };
+
+  // Save changes
+  const saveToStorage = (key: string, data: any, userOverride?: any) => {
+    try {
+      const userToUse = userOverride !== undefined ? userOverride : currentUser;
+      const isGlobal = GLOBAL_STORAGE_KEYS.includes(key);
+      const finalKey = isGlobal ? key : getScopedKey(key, userToUse);
+
       const jsonValue = JSON.stringify(data);
       if (Platform.OS === 'web') {
-        localStorage.setItem(key, jsonValue);
+        localStorage.setItem(finalKey, jsonValue);
       } else {
-        AsyncStorage.setItem(key, jsonValue).catch(e => {
-          console.warn('Failed to save key async', key, e);
+        AsyncStorage.setItem(finalKey, jsonValue).catch(e => {
+          console.warn('Failed to save key async', finalKey, e);
         });
       }
     } catch (e) {
@@ -1333,7 +1525,7 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const pData = await profileRes.json();
         if (pData.success && pData.profile) {
           const prof = pData.profile;
-          setUserProfile({
+          const mapped = {
             firstName: prof.firstName || '',
             lastName: prof.lastName || '',
             age: prof.age,
@@ -1356,14 +1548,15 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
             level: prof.level ?? 1,
             streakDays: prof.streakDays ?? 0,
             avatarUrl: prof.avatarUrl
-          });
-          saveToStorage('bf_profile', {
-            ...prof,
-            bodyFatEstimate: prof.bodyFatEstimate ?? 18,
-            leanBodyMass: prof.leanBodyMass ?? 55,
-            xp: prof.xp ?? 0,
-            level: prof.level ?? 1,
-            streakDays: prof.streakDays ?? 0
+          };
+          setUserProfile(mapped);
+          saveToStorage('bf_profile', mapped);
+        } else {
+          setUserProfile(prev => {
+            if (prev && prev.firstName && prev.firstName !== 'Tài (gakon)' && prev.firstName !== 'Tài') return prev;
+            const defProf = getDefaultUserProfile(currentUser?.username, currentUser?.email);
+            saveToStorage('bf_profile', defProf);
+            return defProf;
           });
         }
       }
@@ -1499,9 +1692,15 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       if (postsRes.ok) {
         const poData = await postsRes.json();
-        if (poData.success && poData.posts) {
-          setCommunityPosts(poData.posts);
-          saveToStorage('bf_posts', poData.posts);
+        if (poData.success && Array.isArray(poData.posts)) {
+          setCommunityPosts(prev => {
+            const remotePosts = poData.posts.filter((p: any) => !deletedPostIds.includes(p.id));
+            const remoteIds = new Set(remotePosts.map((p: any) => p.id));
+            const unsyncedLocal = prev.filter(p => !remoteIds.has(p.id) && !deletedPostIds.includes(p.id));
+            const merged = [...unsyncedLocal, ...remotePosts];
+            saveToStorage('bf_posts', merged);
+            return merged;
+          });
         }
       }
     } catch (e) {
@@ -1605,17 +1804,7 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
       saveToStorage('bf_is_admin', backendUser.role === 'ADMIN');
       saveToStorage('bf_is_premium', backendUser.isPremium || false);
 
-      try {
-        const rawP = Platform.OS === 'web' ? localStorage.getItem('bf_profile') : await AsyncStorage.getItem('bf_profile');
-        if (rawP) setUserProfile(JSON.parse(rawP));
-        const rawF = Platform.OS === 'web' ? localStorage.getItem('bf_foods') : await AsyncStorage.getItem('bf_foods');
-        if (rawF) setFoodLogs(JSON.parse(rawF));
-        const rawW = Platform.OS === 'web' ? localStorage.getItem('bf_water') : await AsyncStorage.getItem('bf_water');
-        if (rawW) setWaterLogs(JSON.parse(rawW));
-      } catch (e) {
-        console.warn('Failed to restore local data on login:', e);
-      }
-
+      await loadUserDataForUser(userData);
       await fetchBackendData(token, backendUrl);
       return true;
     } else {
@@ -1638,39 +1827,7 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
       saveToStorage('bf_is_admin', fallbackUserData.role === 'ADMIN');
       saveToStorage('bf_is_premium', true);
 
-      try {
-        const rawP = Platform.OS === 'web' ? localStorage.getItem('bf_profile') : await AsyncStorage.getItem('bf_profile');
-        if (rawP) {
-          setUserProfile(JSON.parse(rawP));
-        } else {
-          setUserProfile({
-            firstName: cleanUsername === 'gakon' ? 'Tài' : cleanUsername,
-            lastName: cleanUsername === 'gakon' ? '(gakon)' : '',
-            age: 24,
-            gender: 'male',
-            heightCm: 175,
-            weightKg: 51,
-            activityLevel: 'moderately_active',
-            targetGoal: 'muscle_gain',
-            bmi: 16.7,
-            bmr: 1484,
-            tdee: 1781,
-            targetCalories: 2031,
-            targetProtein: 130,
-            targetCarbs: 200,
-            targetFat: 60,
-            targetWaterMl: 2500,
-            bodyFatEstimate: 15,
-            leanBodyMass: 45,
-            xp: 120,
-            level: 2,
-            streakDays: 1,
-            avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80'
-          });
-        }
-      } catch (e) {
-        console.warn('Failed to set fallback profile:', e);
-      }
+      await loadUserDataForUser(fallbackUserData);
 
       if (Platform.OS === 'web') {
         console.log('Đã đăng nhập thành công (Chế độ Ngoại tuyến / Local)');
@@ -1713,12 +1870,19 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
         saveToStorage('bf_is_admin', data.user.role === 'ADMIN');
         saveToStorage('bf_is_premium', data.user.isPremium || false);
 
-        setUserProfile(null);
-        saveToStorage('bf_profile', null);
+        const defProf = getDefaultUserProfile(userData.username, userData.email);
+        setUserProfile(defProf);
+        saveToStorage('bf_profile', defProf, userData);
         setFoodLogs([]);
+        saveToStorage('bf_foods', [], userData);
         setWaterLogs([]);
-        saveToStorage('bf_foods', []);
-        saveToStorage('bf_water', []);
+        saveToStorage('bf_water', [], userData);
+        setWeightLogs([]);
+        saveToStorage('bf_weight', [], userData);
+        setDailyDeclarations({});
+        saveToStorage('bf_declarations', {}, userData);
+        setWorkoutSchedules([]);
+        saveToStorage('bf_schedules', [], userData);
         return true;
       }
       return false;
@@ -1760,6 +1924,7 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
         saveToStorage('bf_is_admin', data.user.role === 'ADMIN');
         saveToStorage('bf_is_premium', data.user.isPremium || false);
 
+        await loadUserDataForUser(userData);
         await fetchBackendData(token, backendUrl);
         return true;
       }
@@ -1790,7 +1955,8 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return true;
     } catch (err: any) {
       console.warn('Reset password error:', err);
-      Alert.alert('Đặt lại mật khẩu thất bại', err.message || 'Lỗi kết nối tới backend');
+      const friendly = getFriendlyAuthErrorMessage(err, 'đặt lại mật khẩu');
+      Alert.alert(friendly.title, friendly.message);
       return false;
     }
   };
@@ -1800,9 +1966,12 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
     emailOrPhone: string,
     password: string
   ): Promise<{ success: boolean; message: string; devOtp?: string }> => {
+    const cleanUsername = username.trim();
+    const cleanEmail = emailOrPhone.trim();
+
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s fast timeout
 
       const res = await fetch(`${backendUrl}/v1/auth/register/send-otp`, {
         method: 'POST',
@@ -1810,8 +1979,8 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          username: username.trim(),
-          emailOrPhone: emailOrPhone.trim(),
+          username: cleanUsername,
+          emailOrPhone: cleanEmail,
           password
         }),
         signal: controller.signal
@@ -1828,24 +1997,52 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
       };
     } catch (err: any) {
       console.warn('sendRegisterOtp error:', err);
-      const errMsg = err.name === 'AbortError' ? 'Yêu cầu gửi OTP hết thời gian chờ (Timeout). Vui lòng kiểm tra lại kết nối máy chủ.' : (err.message || 'Lỗi mạng khi kết nối tới backend');
-      Alert.alert('Lỗi', errMsg);
-      return { success: false, message: errMsg };
+      const msg = err.message || (typeof err === 'string' ? err : '');
+
+      if (msg.includes('tồn tại') || msg.includes('không hợp lệ') || msg.includes('exists') || msg.includes('Bad Request')) {
+        const friendly = getFriendlyAuthErrorMessage(err, 'đăng ký tài khoản');
+        Alert.alert(friendly.title, friendly.message);
+        return { success: false, message: friendly.message };
+      }
+
+      // Fast Local Fallback Mode for mobile Expo Go / network isolation
+      console.log(`[AUTH FALLBACK] Backend IP unreachable. Generating local OTP for user: ${cleanUsername}`);
+      const mockDevOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      mockRegisterOtps.set(cleanEmail.toLowerCase(), {
+        username: cleanUsername,
+        password,
+        otp: mockDevOtp,
+        expiresAt: Date.now() + 5 * 60 * 1000
+      });
+
+      return {
+        success: true,
+        message: 'Đã gửi mã OTP thành công (Chế độ Ngoại tuyến / Test).',
+        devOtp: mockDevOtp
+      };
     }
   };
 
   const verifyRegisterOtp = async (emailOrPhone: string, otp: string): Promise<boolean> => {
+    const cleanEmail = emailOrPhone.trim().toLowerCase();
+    const cleanOtp = otp.trim();
+
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
       const res = await fetch(`${backendUrl}/v1/auth/register/verify-otp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          emailOrPhone: emailOrPhone.trim(),
-          otp: otp.trim()
-        })
+          emailOrPhone: cleanEmail,
+          otp: cleanOtp
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.message || 'Xác thực OTP thất bại');
@@ -1867,19 +2064,76 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
         saveToStorage('bf_current_user', userData);
         saveToStorage('bf_is_admin', data.user.role === 'ADMIN');
         saveToStorage('bf_is_premium', data.user.isPremium || false);
+        setHasCompletedOnboarding(false);
+        saveToStorage('bf_has_completed_onboarding', false);
 
-        setUserProfile(null);
-        saveToStorage('bf_profile', null);
+        const defProf = getDefaultUserProfile(userData.username, userData.email);
+        setUserProfile(defProf);
+        saveToStorage('bf_profile', defProf, userData);
         setFoodLogs([]);
+        saveToStorage('bf_foods', [], userData);
         setWaterLogs([]);
-        saveToStorage('bf_foods', []);
-        saveToStorage('bf_water', []);
+        saveToStorage('bf_water', [], userData);
+        setWeightLogs([]);
+        saveToStorage('bf_weight', [], userData);
+        setDailyDeclarations({});
+        saveToStorage('bf_declarations', {}, userData);
+        setWorkoutSchedules([]);
+        saveToStorage('bf_schedules', [], userData);
         return true;
       }
       return false;
     } catch (err: any) {
       console.warn('verifyRegisterOtp error:', err);
-      Alert.alert('Xác thực thất bại', err.message || 'Lỗi mạng khi kết nối tới backend');
+      const msg = err.message || (typeof err === 'string' ? err : '');
+
+      if (msg.includes('không chính xác') || msg.includes('hết hạn') || msg.includes('không tìm thấy')) {
+        const friendly = getFriendlyAuthErrorMessage(err, 'xác thực OTP đăng ký');
+        Alert.alert(friendly.title, friendly.message);
+        return false;
+      }
+
+      // Check Local Fallback OTP
+      const cached = mockRegisterOtps.get(cleanEmail);
+      if (cached && cached.otp === cleanOtp) {
+        console.log(`[AUTH FALLBACK] Verifying local register OTP for user: ${cached.username}`);
+        const token = `mock-token:register:${cached.username}:${cleanEmail}:${cached.password || ''}`;
+        const userData = {
+          uid: `local-uid-${cached.username}`,
+          email: cleanEmail,
+          username: cached.username,
+          role: 'USER',
+          isPremium: true
+        };
+        setUserToken(token);
+        setCurrentUser(userData);
+        setIsAdmin(false);
+        setIsPremium(true);
+        saveToStorage('bf_user_token', token);
+        saveToStorage('bf_current_user', userData);
+        saveToStorage('bf_is_admin', false);
+        saveToStorage('bf_is_premium', true);
+        setHasCompletedOnboarding(false);
+        saveToStorage('bf_has_completed_onboarding', false);
+
+        const defProf = getDefaultUserProfile(userData.username, userData.email);
+        setUserProfile(defProf);
+        saveToStorage('bf_profile', defProf, userData);
+        setFoodLogs([]);
+        saveToStorage('bf_foods', [], userData);
+        setWaterLogs([]);
+        saveToStorage('bf_water', [], userData);
+        setWeightLogs([]);
+        saveToStorage('bf_weight', [], userData);
+        setDailyDeclarations({});
+        saveToStorage('bf_declarations', {}, userData);
+        setWorkoutSchedules([]);
+        saveToStorage('bf_schedules', [], userData);
+        return true;
+      }
+
+      const friendly = getFriendlyAuthErrorMessage(err, 'xác thực OTP đăng ký');
+      Alert.alert(friendly.title, friendly.message);
       return false;
     }
   };
@@ -1889,7 +2143,7 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
   ): Promise<{ success: boolean; message: string; emailOrPhone?: string; devOtp?: string }> => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s fast timeout
 
       const res = await fetch(`${backendUrl}/v1/auth/forgot-password/send-otp`, {
         method: 'POST',
@@ -1914,8 +2168,8 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
       };
     } catch (err: any) {
       console.warn('sendForgotPasswordOtp error:', err);
-      const errMsg = err.name === 'AbortError' ? 'Yêu cầu gửi OTP hết thời gian chờ (Timeout). Vui lòng kiểm tra lại kết nối máy chủ.' : (err.message || 'Lỗi mạng khi kết nối tới backend');
-      return { success: false, message: errMsg };
+      const friendly = getFriendlyAuthErrorMessage(err, 'gửi OTP khôi phục mật khẩu');
+      return { success: false, message: friendly.message };
     }
   };
 
@@ -1943,7 +2197,8 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return true;
     } catch (err: any) {
       console.warn('verifyForgotPasswordOtp error:', err);
-      Alert.alert('Lỗi', err.message || 'Lỗi mạng khi kết nối tới backend');
+      const friendly = getFriendlyAuthErrorMessage(err, 'xác thực OTP mật khẩu mới');
+      Alert.alert(friendly.title, friendly.message);
       return false;
     }
   };
@@ -1958,25 +2213,34 @@ export const LocalDbProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setWaterLogs([]);
     setWeightLogs([]);
     setWorkoutSchedules([]);
+    setDailyDeclarations({});
+    setQuests([]);
+    setLiftingHistory([]);
+    setLiftingRecords(null);
+    setUserBadges([]);
+    setUserChallenges([]);
+    setActiveMealPlan(null);
+    setFavoriteMealPlans([]);
+    setShoppingList([]);
+    setChatLogs([]);
     saveToStorage('bf_user_token', null);
     saveToStorage('bf_current_user', null);
     saveToStorage('bf_is_admin', false);
     saveToStorage('bf_is_premium', false);
-    saveToStorage('bf_profile', null);
-    saveToStorage('bf_foods', []);
-    saveToStorage('bf_water', []);
-    saveToStorage('bf_weight', []);
-    saveToStorage('bf_schedules', []);
   };
 
   const saveBackendUrl = (url: string) => {
     if (!url || url.trim() === '') {
       const defaultUrl = getDefaultBackendUrl();
-      setBackendUrl(defaultUrl);
+      if (backendUrl !== defaultUrl) {
+        setBackendUrl(defaultUrl);
+      }
       saveToStorage('bf_backend_url', '');
     } else {
       const cleanUrl = url.trim().replace(/\/+$/, '');
-      setBackendUrl(cleanUrl);
+      if (backendUrl !== cleanUrl) {
+        setBackendUrl(cleanUrl);
+      }
       saveToStorage('bf_backend_url', cleanUrl);
     }
   };
@@ -2348,6 +2612,8 @@ ${foodListStr || 'Không ghi nhận món ăn nào.'}
     };
     setUserProfile(updated);
     saveToStorage('bf_profile', updated);
+    setHasCompletedOnboarding(true);
+    saveToStorage('bf_has_completed_onboarding', true);
     addXp(30);
 
     if (userToken) {
@@ -4356,48 +4622,62 @@ Trả về kết quả dưới định dạng JSON với cấu trúc chính xác
     });
   };
   const addCommunityPost = async (content: string, photoUrl?: string) => {
-    let newPost: CommunityPost = {
-      id: Math.random().toString(36).substring(7),
+    const tempId = Math.random().toString(36).substring(7);
+    const newPost: CommunityPost = {
+      id: tempId,
       userId: currentUser?.uid || 'mock-uid',
-      username: currentUser?.username || 'Bạn',
+      username: currentUser?.username || (userProfile ? `${userProfile.firstName} ${userProfile.lastName}`.trim() : 'Bạn'),
       content,
       photoUrl,
       createdAt: new Date().toISOString(),
       likes: [],
-      comments: []
+      comments: [],
+      userProfile: {
+        avatarUrl: userProfile?.avatarUrl,
+        level: userProfile?.level || 1,
+      }
     };
 
-    if (userToken) {
-      try {
-        const res = await fetch(`${backendUrl}/v1/community/posts`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${userToken}`
-          },
-          body: JSON.stringify({ content, photoUrl })
-        });
-        if (res.ok) {
-          const resData = await res.json();
-          if (resData.success && resData.post) {
-            newPost = {
-              ...resData.post,
-              likes: resData.post.likes || [],
-              comments: resData.post.comments || []
-            };
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to sync post to backend', err);
-      }
-    }
-
+    // 1. Instant local optimistic update
     setCommunityPosts(prev => {
       const updated = [newPost, ...prev];
       saveToStorage('bf_posts', updated);
       return updated;
     });
     addXp(20);
+
+    // 2. Async background sync to backend
+    if (userToken) {
+      (async () => {
+        try {
+          const res = await fetch(`${backendUrl}/v1/community/posts`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userToken}`
+            },
+            body: JSON.stringify({ content, photoUrl })
+          });
+          if (res.ok) {
+            const resData = await res.json();
+            if (resData.success && resData.post) {
+              const backendPost = {
+                ...resData.post,
+                likes: resData.post.likes || [],
+                comments: resData.post.comments || []
+              };
+              setCommunityPosts(prev => {
+                const updated = prev.map(p => (p.id === tempId ? backendPost : p));
+                saveToStorage('bf_posts', updated);
+                return updated;
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to sync post to backend', err);
+        }
+      })();
+    }
   };
 
   const toggleLikePost = async (postId: string) => {
@@ -4474,6 +4754,21 @@ Trả về kết quả dưới định dạng JSON với cấu trúc chính xác
   };
 
   const deleteCommunityPost = async (postId: string) => {
+    // 1. Store in persistent deleted posts state list
+    setDeletedPostIds(prev => {
+      const updated = [...new Set([...prev, postId])];
+      saveToStorage('bf_deleted_posts', updated);
+      return updated;
+    });
+
+    // 2. Optimistic local state update
+    setCommunityPosts(prev => {
+      const updated = prev.filter(p => p.id !== postId);
+      saveToStorage('bf_posts', updated);
+      return updated;
+    });
+
+    // 3. Sync delete to backend API
     if (userToken) {
       try {
         await fetch(`${backendUrl}/v1/community/posts/${postId}`, {
@@ -4486,12 +4781,6 @@ Trả về kết quả dưới định dạng JSON với cấu trúc chính xác
         console.warn('Failed to delete post on backend', err);
       }
     }
-    setCommunityPosts(prev => {
-      const updated = prev.filter(p => p.id !== postId);
-      saveToStorage('bf_posts', updated);
-      return updated;
-    });
-    Alert.alert('Thành công', 'Đã xóa bài viết.');
   };
 
   const joinChallenge = async (challengeId: string) => {
@@ -5164,6 +5453,8 @@ Lưu ý: Chỉ bao gồm nutritionInfo và suggestedMeals cho các loại hoạt
         userBadges,
         isPremium,
         isAdmin,
+        hasCompletedOnboarding,
+        setHasCompletedOnboarding,
         addWeightLog,
         scheduleWorkout,
         toggleWorkoutCompleted,

@@ -13,6 +13,7 @@ import { useLocalDb } from '@/hooks/use-local-db';
 import { getLocalDateString } from '@/utils/date';
 import { AiScanningModal } from '@/components/AiScanningModal';
 import { MobileFeatureModal } from '@/components/MobileFeatureModal';
+import { OnboardingModal } from '@/components/OnboardingModal';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -33,6 +34,9 @@ export default function HomeScreen() {
     addWaterLog,
     triggerMockScanFood,
     dailyDeclarations,
+    hasCompletedOnboarding,
+    setHasCompletedOnboarding,
+    currentUser,
   } = useLocalDb();
   const [avatarUri, setAvatarUri] = useState(userProfile?.avatarUrl || DEFAULT_AVATAR);
 
@@ -150,7 +154,7 @@ export default function HomeScreen() {
   if (!userProfile) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <LinearGradient colors={Gradients.lightSurface} style={StyleSheet.absoluteFillObject} />
+        <LinearGradient colors={Gradients.lightSurface} style={StyleSheet.absoluteFill} />
         <ScrollView contentContainerStyle={styles.onboardingContent}>
           <Text style={styles.logoText}>BODYFIT</Text>
           <Text style={styles.onboardingTitle}>Bắt đầu hành trình thay đổi cơ thể thông minh hơn.</Text>
@@ -1046,6 +1050,8 @@ export default function HomeScreen() {
       <AiScanningModal visible={isAiScanning} />
       {/* Web Mobile Feature Alert Modal */}
       <MobileFeatureModal visible={webFeatureModalOpen} onClose={() => setWebFeatureModalOpen(false)} />
+      {/* Onboarding Profile Setup Modal */}
+      <OnboardingModal visible={!hasCompletedOnboarding && !!currentUser} onComplete={() => setHasCompletedOnboarding(true)} />
     </View>
   );
 }

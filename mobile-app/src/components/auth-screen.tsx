@@ -4,7 +4,7 @@ import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
-import { useLocalDb } from '@/hooks/use-local-db';
+import { useLocalDb, getFriendlyAuthErrorMessage } from '@/hooks/use-local-db';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 import { useTheme } from '@/hooks/use-theme';
@@ -231,8 +231,10 @@ export default function AuthScreen() {
     }
 
     setIsLoading(true);
-    // Save backend url first
-    saveBackendUrl(localBackendUrl);
+    // Save backend url only if changed to avoid triggering unnecessary context re-renders during request execution
+    if (localBackendUrl && localBackendUrl.trim() !== backendUrl) {
+      saveBackendUrl(localBackendUrl);
+    }
 
     try {
       if (isLogin) {
@@ -256,7 +258,8 @@ export default function AuthScreen() {
         }
       }
     } catch (e: any) {
-      Alert.alert('Lỗi', e.message || 'Lỗi hệ thống khi đăng nhập/đăng ký.');
+      const friendly = getFriendlyAuthErrorMessage(e, isLogin ? 'đăng nhập' : 'đăng ký');
+      Alert.alert(friendly.title, friendly.message);
     } finally {
       setIsLoading(false);
     }
@@ -279,7 +282,8 @@ export default function AuthScreen() {
         setRegisterDevOtp(undefined);
       }
     } catch (e: any) {
-      Alert.alert('Lỗi', e.message || 'Lỗi xác thực OTP đăng ký.');
+      const friendly = getFriendlyAuthErrorMessage(e, 'xác thực OTP đăng ký');
+      Alert.alert(friendly.title, friendly.message);
     } finally {
       setIsLoading(false);
     }
@@ -299,8 +303,9 @@ export default function AuthScreen() {
     }
 
     setIsLoading(true);
-    // Save backend url first so the API call uses the user-specified server address
-    saveBackendUrl(localBackendUrl);
+    if (localBackendUrl && localBackendUrl.trim() !== backendUrl) {
+      saveBackendUrl(localBackendUrl);
+    }
     try {
       const res = await sendForgotPasswordOtp(target);
       if (res.success) {
@@ -316,10 +321,12 @@ export default function AuthScreen() {
           Alert.alert('Gửi mã OTP', res.message);
         }
       } else {
-        Alert.alert('Lỗi', res.message || 'Lỗi hệ thống khi gửi OTP khôi phục mật khẩu.');
+        const friendly = getFriendlyAuthErrorMessage(res.message, 'gửi OTP khôi phục mật khẩu');
+        Alert.alert(friendly.title, friendly.message);
       }
     } catch (e: any) {
-      Alert.alert('Lỗi', e.message || 'Lỗi hệ thống khi gửi OTP khôi phục mật khẩu.');
+      const friendly = getFriendlyAuthErrorMessage(e, 'gửi OTP khôi phục mật khẩu');
+      Alert.alert(friendly.title, friendly.message);
     } finally {
       setIsLoading(false);
     }
@@ -356,7 +363,8 @@ export default function AuthScreen() {
         setResetConfirmPassword('');
       }
     } catch (e: any) {
-      Alert.alert('Lỗi', e.message || 'Xác thực OTP hoặc đặt lại mật khẩu thất bại.');
+      const friendly = getFriendlyAuthErrorMessage(e, 'đặt lại mật khẩu');
+      Alert.alert(friendly.title, friendly.message);
     } finally {
       setIsLoading(false);
     }

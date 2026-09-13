@@ -190,13 +190,29 @@ export default function SettingsScreen() {
 
   const lineChart = getLineChartData();
   
-  const [firstName, setFirstName] = useState(userProfile?.firstName || 'gakon');
+  const [firstName, setFirstName] = useState(userProfile?.firstName || '');
   const [lastName, setLastName] = useState(userProfile?.lastName || '');
   const [age, setAge] = useState(String(userProfile?.age || 25));
   const [height, setHeight] = useState(String(userProfile?.heightCm || 175));
   const [weight, setWeight] = useState(String(userProfile?.weightKg || 70));
+  const [gender, setGender] = useState<'male' | 'female' | 'other'>(userProfile?.gender || 'male');
+  const [activityLevel, setActivityLevel] = useState<any>(userProfile?.activityLevel || 'moderately_active');
+  const [targetGoal, setTargetGoal] = useState<any>(userProfile?.targetGoal || 'muscle_gain');
   const [waist, setWaist] = useState('');
   const [status, setStatus] = useState('');
+
+  useEffect(() => {
+    if (userProfile && profileOpen) {
+      setFirstName(userProfile.firstName || '');
+      setLastName(userProfile.lastName || '');
+      setAge(String(userProfile.age || 25));
+      setHeight(String(userProfile.heightCm || 175));
+      setWeight(String(userProfile.weightKg || 70));
+      setGender(userProfile.gender || 'male');
+      setActivityLevel(userProfile.activityLevel || 'moderately_active');
+      setTargetGoal(userProfile.targetGoal || 'muscle_gain');
+    }
+  }, [profileOpen, userProfile]);
 
   const loadDashboardData = async () => {
     setAdminLoading(true);
@@ -308,15 +324,12 @@ export default function SettingsScreen() {
       if (userToken && backendUrl) {
         (async () => {
           try {
-            const { ImageManipulator, SaveFormat } = require('expo-image-manipulator');
-            const manipulated = await ImageManipulator.manipulate(localUri)
-              .resize({ width: 300, height: 300 })
-              .renderAsync();
-            const saved = await manipulated.saveAsync({
-              format: SaveFormat.JPEG,
-              compress: 0.4,
-              base64: true,
-            });
+            const ImageManipulator = require('expo-image-manipulator');
+            const saved = await ImageManipulator.manipulateAsync(
+              localUri,
+              [{ resize: { width: 300, height: 300 } }],
+              { compress: 0.4, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+            );
 
             const res = await fetch(`${backendUrl}/v1/users/profile/avatar`, {
               method: 'POST',
@@ -346,14 +359,14 @@ export default function SettingsScreen() {
 
   const saveProfile = () => {
     updateProfile({ 
-      firstName: firstName || 'gakon', 
-      lastName: lastName || '', 
+      firstName: firstName.trim() || userProfile?.firstName || 'Người dùng', 
+      lastName: lastName.trim(), 
       age: Number(age) || userProfile?.age || 25, 
-      gender: userProfile?.gender || 'male', 
+      gender: gender || userProfile?.gender || 'male', 
       heightCm: Number(height) || userProfile?.heightCm || 175, 
       weightKg: Number(weight) || userProfile?.weightKg || 70, 
-      activityLevel: userProfile?.activityLevel || 'moderately_active', 
-      targetGoal: userProfile?.targetGoal || 'muscle_gain', 
+      activityLevel: activityLevel || userProfile?.activityLevel || 'moderately_active', 
+      targetGoal: targetGoal || userProfile?.targetGoal || 'muscle_gain', 
       avatarUrl: userProfile?.avatarUrl 
     } as any);
     setStatus('Đã cập nhật hồ sơ.');
@@ -936,29 +949,25 @@ export default function SettingsScreen() {
             </View>
 
             <View style={{ height: 160, alignItems: 'center', justifyContent: 'center', marginTop: 12 }}>
-              <Svg height="140" width="300">
-                {/* Grid Lines */}
-                {[0, 1, 2, 3].map((val, idx) => {
-                  const y = 20 + idx * 30;
-                  return (
-                    <Line key={idx} x1="30" y1={y} x2="290" y2={y} stroke="rgba(255, 255, 255, 0.05)" strokeWidth="1" />
-                  );
-                })}
-                
-                {/* Bars & Labels */}
-                {(() => {
-                  const displayLogs = (() => {
-                    if (!weightLogs || weightLogs.length === 0) {
-                      return [
-                        { loggedDate: '16/7', weightKg: 72.1 },
-                        { loggedDate: '17/7', weightKg: 71.8 },
-                        { loggedDate: '18/7', weightKg: 71.5 },
-                        { loggedDate: '19/7', weightKg: 71.0 },
-                        { loggedDate: '20/7', weightKg: 70.8 },
-                        { loggedDate: '21/7', weightKg: 70.5 },
-                      ];
-                    }
-                    // Keep latest weight log per unique date
+              {!weightLogs || weightLogs.length === 0 ? (
+                <View style={{ alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
+                  <Ionicons name="analytics-outline" size={36} color={theme.textMuted} style={{ marginBottom: 8, opacity: 0.6 }} />
+                  <Text style={{ color: theme.textMuted, fontSize: 13, textAlign: 'center', fontWeight: '500' }}>
+                    Chưa có dữ liệu biến động cân nặng.{'\n'}Nhấn "Ghi chỉ số" để bắt đầu theo dõi!
+                  </Text>
+                </View>
+              ) : (
+                <Svg height="140" width="300">
+                  {/* Grid Lines */}
+                  {[0, 1, 2, 3].map((val, idx) => {
+                    const y = 20 + idx * 30;
+                    return (
+                      <Line key={idx} x1="30" y1={y} x2="290" y2={y} stroke="rgba(255, 255, 255, 0.05)" strokeWidth="1" />
+                    );
+                  })}
+                  
+                  {/* Bars & Labels */}
+                  {(() => {
                     const dateMap = new Map<string, any>();
                     weightLogs.forEach(l => {
                       if (!dateMap.has(l.loggedDate)) {
@@ -966,58 +975,57 @@ export default function SettingsScreen() {
                       }
                     });
                     const list = Array.from(dateMap.values());
-                    // Sort chronologically ascending (oldest -> newest)
                     list.sort((a, b) => a.loggedDate.localeCompare(b.loggedDate));
-                    return list.slice(-6);
-                  })();
-                  
-                  const minW = Math.min(...displayLogs.map(l => l.weightKg)) - 2;
-                  const maxW = Math.max(...displayLogs.map(l => l.weightKg)) + 2;
-                  const range = maxW - minW || 10;
-                  
-                  return displayLogs.map((item, idx) => {
-                    const x = 50 + idx * 40;
-                    const h = ((item.weightKg - minW) / range) * 70 + 20; // height from baseline
-                    const y = 110 - h;
+                    const displayLogs = list.slice(-6);
                     
-                    return (
-                      <G key={idx}>
-                        {/* Column Bar */}
-                        <Rect 
-                          x={x - 10} 
-                          y={y} 
-                          width="20" 
-                          height={h} 
-                          fill={idx === displayLogs.length - 1 ? theme.primary : 'rgba(255, 159, 28, 0.3)'} 
-                          rx="5"
-                        />
-                        {/* Value above bar */}
-                        <SvgText 
-                          x={x} 
-                          y={y - 6} 
-                          fill={theme.text} 
-                          fontSize="10" 
-                          fontWeight="800" 
-                          textAnchor="middle"
-                        >
-                          {item.weightKg}
-                        </SvgText>
-                        {/* Date below bar */}
-                        <SvgText 
-                          x={x} 
-                          y="125" 
-                          fill={theme.textMuted} 
-                          fontSize="9" 
-                          fontWeight="700" 
-                          textAnchor="middle"
-                        >
-                          {item.loggedDate.includes('-') ? item.loggedDate.substring(5) : item.loggedDate}
-                        </SvgText>
-                      </G>
-                    );
-                  });
-                })()}
-              </Svg>
+                    const minW = Math.min(...displayLogs.map(l => l.weightKg)) - 2;
+                    const maxW = Math.max(...displayLogs.map(l => l.weightKg)) + 2;
+                    const range = maxW - minW || 10;
+                    
+                    return displayLogs.map((item, idx) => {
+                      const x = 50 + idx * 40;
+                      const h = ((item.weightKg - minW) / range) * 70 + 20; // height from baseline
+                      const y = 110 - h;
+                      
+                      return (
+                        <G key={idx}>
+                          {/* Column Bar */}
+                          <Rect 
+                            x={x - 10} 
+                            y={y} 
+                            width="20" 
+                            height={h} 
+                            fill={idx === displayLogs.length - 1 ? theme.primary : 'rgba(255, 159, 28, 0.3)'} 
+                            rx="5"
+                          />
+                          {/* Value above bar */}
+                          <SvgText 
+                            x={x} 
+                            y={y - 6} 
+                            fill={theme.text} 
+                            fontSize="10" 
+                            fontWeight="800" 
+                            textAnchor="middle"
+                          >
+                            {item.weightKg}
+                          </SvgText>
+                          {/* Date below bar */}
+                          <SvgText 
+                            x={x} 
+                            y="125" 
+                            fill={theme.textMuted} 
+                            fontSize="9" 
+                            fontWeight="600" 
+                            textAnchor="middle"
+                          >
+                            {item.loggedDate.includes('-') ? item.loggedDate.substring(5) : item.loggedDate}
+                          </SvgText>
+                        </G>
+                      );
+                    });
+                  })()}
+                </Svg>
+              )}
             </View>
           </View>
 
@@ -1090,38 +1098,195 @@ export default function SettingsScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
           >
-            <Pressable onPress={() => setProfileOpen(false)} style={StyleSheet.absoluteFillObject} />
+            <Pressable onPress={() => setProfileOpen(false)} style={StyleSheet.absoluteFill} />
             <View 
               style={{
                 width: '100%',
-                maxWidth: 400,
+                maxWidth: 440,
                 backgroundColor: '#1E1A17',
                 borderRadius: 24,
                 borderWidth: 1.2,
-                borderColor: 'rgba(255, 159, 28, 0.25)',
+                borderColor: 'rgba(255, 159, 28, 0.3)',
                 padding: 20,
-                gap: 10,
-                maxHeight: '85%',
+                maxHeight: '90%',
               }}
             >
-              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
-                <Text style={[styles.modalTitle, { color: '#FFFFFF', marginBottom: 6 }]}>Sửa hồ sơ cá nhân 👤</Text>
-                <View style={styles.doubleInput}>
-                  <TextInput value={firstName} onChangeText={setFirstName} style={[styles.input, styles.halfInput, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderColor: 'rgba(255, 159, 28, 0.2)' }]} placeholder="Tên" placeholderTextColor="rgba(255, 248, 231, 0.4)" />
-                  <TextInput value={lastName} onChangeText={setLastName} style={[styles.input, styles.halfInput, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderColor: 'rgba(255, 159, 28, 0.2)' }]} placeholder="Họ" placeholderTextColor="rgba(255, 248, 231, 0.4)" />
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={{ gap: 14, paddingBottom: 10 }}>
+                {/* Modal Header */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                  <Text style={[styles.modalTitle, { color: '#FFF8E7' }]}>Sửa hồ sơ cá nhân 👤</Text>
+                  <Pressable onPress={() => setProfileOpen(false)} hitSlop={10}>
+                    <Ionicons name="close-circle" size={24} color="rgba(255, 248, 231, 0.4)" />
+                  </Pressable>
                 </View>
-                <View style={styles.doubleInput}>
-                  <TextInput value={age} onChangeText={setAge} keyboardType="numeric" style={[styles.input, styles.halfInput, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderColor: 'rgba(255, 159, 28, 0.2)' }]} placeholder="Tuổi" placeholderTextColor="rgba(255, 248, 231, 0.4)" />
-                  <TextInput value={height} onChangeText={setHeight} keyboardType="numeric" style={[styles.input, styles.halfInput, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderColor: 'rgba(255, 159, 28, 0.2)' }]} placeholder="Chiều cao (cm)" placeholderTextColor="rgba(255, 248, 231, 0.4)" />
+
+                {/* Section 1: Name */}
+                <View style={{ gap: 6 }}>
+                  <Text style={{ color: 'rgba(255, 248, 231, 0.7)', fontSize: 12, fontWeight: '700' }}>Họ và tên</Text>
+                  <View style={styles.doubleInput}>
+                    <View style={styles.halfInput}>
+                      <Text style={{ color: 'rgba(255, 248, 231, 0.5)', fontSize: 11, marginBottom: 4 }}>Tên *</Text>
+                      <TextInput
+                        value={firstName}
+                        onChangeText={setFirstName}
+                        style={[styles.input, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderColor: 'rgba(255, 159, 28, 0.25)' }]}
+                        placeholder="Tên"
+                        placeholderTextColor="rgba(255, 248, 231, 0.35)"
+                      />
+                    </View>
+                    <View style={styles.halfInput}>
+                      <Text style={{ color: 'rgba(255, 248, 231, 0.5)', fontSize: 11, marginBottom: 4 }}>Họ</Text>
+                      <TextInput
+                        value={lastName}
+                        onChangeText={setLastName}
+                        style={[styles.input, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderColor: 'rgba(255, 159, 28, 0.25)' }]}
+                        placeholder="Họ"
+                        placeholderTextColor="rgba(255, 248, 231, 0.35)"
+                      />
+                    </View>
+                  </View>
                 </View>
-                <TextInput value={weight} onChangeText={setWeight} keyboardType="numeric" style={[styles.input, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderColor: 'rgba(255, 159, 28, 0.2)' }]} placeholder="Cân nặng (kg)" placeholderTextColor="rgba(255, 248, 231, 0.4)" />
-                <Pressable onPress={saveProfile} style={{ marginTop: 12 }}>
+
+                {/* Section 2: Metrics */}
+                <View style={{ gap: 6 }}>
+                  <Text style={{ color: 'rgba(255, 248, 231, 0.7)', fontSize: 12, fontWeight: '700' }}>Chỉ số cơ thể</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: 'rgba(255, 248, 231, 0.5)', fontSize: 11, marginBottom: 4 }}>Tuổi</Text>
+                      <TextInput
+                        value={age}
+                        onChangeText={setAge}
+                        keyboardType="numeric"
+                        style={[styles.input, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderColor: 'rgba(255, 159, 28, 0.25)' }]}
+                        placeholder="25"
+                        placeholderTextColor="rgba(255, 248, 231, 0.35)"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: 'rgba(255, 248, 231, 0.5)', fontSize: 11, marginBottom: 4 }}>Cao (cm)</Text>
+                      <TextInput
+                        value={height}
+                        onChangeText={setHeight}
+                        keyboardType="numeric"
+                        style={[styles.input, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderColor: 'rgba(255, 159, 28, 0.25)' }]}
+                        placeholder="175"
+                        placeholderTextColor="rgba(255, 248, 231, 0.35)"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: 'rgba(255, 248, 231, 0.5)', fontSize: 11, marginBottom: 4 }}>Nặng (kg)</Text>
+                      <TextInput
+                        value={weight}
+                        onChangeText={setWeight}
+                        keyboardType="numeric"
+                        style={[styles.input, { color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderColor: 'rgba(255, 159, 28, 0.25)' }]}
+                        placeholder="70"
+                        placeholderTextColor="rgba(255, 248, 231, 0.35)"
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Section 3: Gender */}
+                <View style={{ gap: 6 }}>
+                  <Text style={{ color: 'rgba(255, 248, 231, 0.7)', fontSize: 12, fontWeight: '700' }}>Giới tính</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {[
+                      { id: 'male', label: '♂ Nam' },
+                      { id: 'female', label: '♀ Nữ' },
+                      { id: 'other', label: '⚥ Khác' },
+                    ].map(item => (
+                      <Pressable
+                        key={item.id}
+                        onPress={() => setGender(item.id as any)}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 10,
+                          borderRadius: 12,
+                          borderWidth: 1.2,
+                          borderColor: gender === item.id ? '#FF9F1C' : 'rgba(255, 255, 255, 0.1)',
+                          backgroundColor: gender === item.id ? 'rgba(255, 159, 28, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{ color: gender === item.id ? '#FF9F1C' : 'rgba(255, 248, 231, 0.7)', fontWeight: '800', fontSize: 13 }}>
+                          {item.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Section 4: Activity Level */}
+                <View style={{ gap: 6 }}>
+                  <Text style={{ color: 'rgba(255, 248, 231, 0.7)', fontSize: 12, fontWeight: '700' }}>Mức độ vận động</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {[
+                      { id: 'sedentary', label: 'Ít vận động' },
+                      { id: 'lightly_active', label: 'Vận động nhẹ' },
+                      { id: 'moderately_active', label: 'Vận động vừa' },
+                      { id: 'very_active', label: 'Vận động nhiều' },
+                      { id: 'athlete', label: 'Vận động viên' },
+                    ].map(item => (
+                      <Pressable
+                        key={item.id}
+                        onPress={() => setActivityLevel(item.id as any)}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 20,
+                          borderWidth: 1,
+                          borderColor: activityLevel === item.id ? '#FF9F1C' : 'rgba(255, 255, 255, 0.1)',
+                          backgroundColor: activityLevel === item.id ? 'rgba(255, 159, 28, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                        }}
+                      >
+                        <Text style={{ color: activityLevel === item.id ? '#FF9F1C' : 'rgba(255, 248, 231, 0.7)', fontWeight: '700', fontSize: 12 }}>
+                          {item.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Section 5: Target Goal */}
+                <View style={{ gap: 6 }}>
+                  <Text style={{ color: 'rgba(255, 248, 231, 0.7)', fontSize: 12, fontWeight: '700' }}>Mục tiêu sức khỏe</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {[
+                      { id: 'weight_loss', label: '📉 Giảm cân' },
+                      { id: 'weight_gain', label: '📈 Tăng cân' },
+                      { id: 'maintain_weight', label: '⚖️ Giữ cân' },
+                      { id: 'muscle_gain', label: '🏋️‍♂️ Tăng cơ' },
+                      { id: 'healthy_lifestyle', label: '🥗 Sống khỏe' },
+                    ].map(item => (
+                      <Pressable
+                        key={item.id}
+                        onPress={() => setTargetGoal(item.id as any)}
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 20,
+                          borderWidth: 1,
+                          borderColor: targetGoal === item.id ? '#FF9F1C' : 'rgba(255, 255, 255, 0.1)',
+                          backgroundColor: targetGoal === item.id ? 'rgba(255, 159, 28, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                        }}
+                      >
+                        <Text style={{ color: targetGoal === item.id ? '#FF9F1C' : 'rgba(255, 248, 231, 0.7)', fontWeight: '700', fontSize: 12 }}>
+                          {item.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Action Buttons */}
+                <Pressable onPress={saveProfile} style={{ marginTop: 8 }}>
                   <View style={[styles.saveButton, { backgroundColor: '#FF9F1C' }]}>
-                    <Text style={[styles.saveText, { color: '#100E0C', fontWeight: '900' }]}>Lưu hồ sơ</Text>
+                    <Text style={[styles.saveText, { color: '#100E0C', fontWeight: '900', fontSize: 15 }]}>Lưu thay đổi</Text>
                   </View>
                 </Pressable>
                 <Pressable onPress={() => setProfileOpen(false)} style={styles.cancel}>
-                  <Text style={{ color: 'rgba(255, 248, 231, 0.5)', fontWeight: '800' }}>Hủy</Text>
+                  <Text style={{ color: 'rgba(255, 248, 231, 0.5)', fontWeight: '800' }}>Hủy bỏ</Text>
                 </Pressable>
               </ScrollView>
             </View>
@@ -1133,7 +1298,7 @@ export default function SettingsScreen() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
           >
-            <Pressable onPress={() => setWeightOpen(false)} style={StyleSheet.absoluteFillObject} />
+            <Pressable onPress={() => setWeightOpen(false)} style={StyleSheet.absoluteFill} />
             <View 
               style={{
                 width: '100%',
@@ -1233,7 +1398,7 @@ const styles = StyleSheet.create({
     borderRadius: 36,
   },
   avatarLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderRadius: 36,
     alignItems: 'center' as const,

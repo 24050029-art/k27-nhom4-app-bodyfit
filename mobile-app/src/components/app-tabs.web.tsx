@@ -115,7 +115,7 @@ export default function AppTabs() {
               <View
                 key={screen.route}
                 style={[
-                  StyleSheet.absoluteFillObject,
+                  StyleSheet.absoluteFill,
                   { display: 'none' },
                 ]}
               >
@@ -128,7 +128,7 @@ export default function AppTabs() {
             <Animated.View
               key={screen.route}
               style={[
-                StyleSheet.absoluteFillObject,
+                StyleSheet.absoluteFill,
                 { transform: [{ translateX: slideAnim }] },
               ]}
             >

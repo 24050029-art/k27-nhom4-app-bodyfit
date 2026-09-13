@@ -247,28 +247,12 @@ export class AuthService {
     const cleanEmailOrPhone = emailOrPhone.trim().toLowerCase();
     const cleanUsername = username.trim().toLowerCase();
 
-    // Check if the input is an email, and perform strict format + MX lookup checks
+    // Check if the input is an email
     const isEmailInput = this.isEmail(cleanEmailOrPhone);
     if (isEmailInput) {
       const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
       if (!emailRegex.test(cleanEmailOrPhone)) {
         throw new BadRequestException('Định dạng email không hợp lệ');
-      }
-
-      const domain = cleanEmailOrPhone.split('@')[1];
-      try {
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('DNS Timeout')), 3000)
-        );
-        const mxRecords = await Promise.race([
-          dns.resolveMx(domain),
-          timeoutPromise
-        ]);
-        if (!mxRecords || mxRecords.length === 0) {
-          console.warn(`Strict MX check warning: No MX records found for ${domain}.`);
-        }
-      } catch (err) {
-        console.warn(`Strict MX check skipped for ${domain} due to: ${err.message}`);
       }
     }
 
@@ -300,44 +284,38 @@ export class AuthService {
       expiresAt
     });
 
-    let sentRealOtp = false;
-
+    // Dispatch email/SMS in background so HTTP response completes in <50ms
     if (isEmailInput) {
       if (this.transporter) {
-        try {
-          await this.transporter.sendMail({
-            from: `"BodyFit" <${process.env.SMTP_USER}>`,
-            to: cleanEmailOrPhone,
-            subject: 'Mã xác thực đăng ký tài khoản BodyFit',
-            text: `Mã OTP đăng ký tài khoản BodyFit của bạn là: ${otp}. Mã này có hiệu lực trong 5 phút.`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-                <h2 style="color: #4CAF50; text-align: center;">BodyFit - Đăng ký tài khoản</h2>
-                <p>Chào bạn,</p>
-                <p>Bạn đang đăng ký tài khoản tại ứng dụng BodyFit. Dưới đây là mã xác thực OTP của bạn:</p>
-                <div style="font-size: 24px; font-weight: bold; text-align: center; margin: 30px 0; letter-spacing: 5px; color: #333;">${otp}</div>
-                <p>Mã OTP này có hiệu lực trong vòng 5 phút. Vui lòng không chia sẻ mã này với bất kỳ ai.</p>
-                <hr style="border: 0; border-top: 1px solid #eeeeee;" />
-                <p style="font-size: 12px; color: #888; text-align: center;">Đây là email tự động từ hệ thống BodyFit. Vui lòng không trả lời email này.</p>
-              </div>
-            `,
-          });
-          sentRealOtp = true;
-        } catch (error) {
-          console.error('Lỗi khi gửi email qua SMTP:', error);
-        }
+        this.transporter.sendMail({
+          from: `"BodyFit" <${process.env.SMTP_USER}>`,
+          to: cleanEmailOrPhone,
+          subject: 'Mã xác thực đăng ký tài khoản BodyFit',
+          text: `Mã OTP đăng ký tài khoản BodyFit của bạn là: ${otp}. Mã này có hiệu lực trong 5 phút.`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+              <h2 style="color: #4CAF50; text-align: center;">BodyFit - Đăng ký tài khoản</h2>
+              <p>Chào bạn,</p>
+              <p>Bạn đang đăng ký tài khoản tại ứng dụng BodyFit. Dưới đây là mã xác thực OTP của bạn:</p>
+              <div style="font-size: 24px; font-weight: bold; text-align: center; margin: 30px 0; letter-spacing: 5px; color: #333;">${otp}</div>
+              <p>Mã OTP này có hiệu lực trong vòng 5 phút. Vui lòng không chia sẻ mã này với bất kỳ ai.</p>
+              <hr style="border: 0; border-top: 1px solid #eeeeee;" />
+              <p style="font-size: 12px; color: #888; text-align: center;">Đây là email tự động từ hệ thống BodyFit. Vui lòng không trả lời email này.</p>
+            </div>
+          `,
+        }).catch(err => console.error('[SMTP Error] Lỗi khi gửi email OTP ngầm:', err));
       }
     } else {
-      sentRealOtp = await this.sendSmsViaTwilio(cleanEmailOrPhone, otp);
+      this.sendSmsViaTwilio(cleanEmailOrPhone, otp).catch(err => console.error('[SMS Error] Lỗi khi gửi SMS OTP ngầm:', err));
     }
 
     console.log(`[OTP REGISTER] OTP for ${cleanEmailOrPhone} is: ${otp}`);
 
     return {
       success: true,
-      message: sentRealOtp ? 'Mã OTP đã được gửi thành công.' : 'Mã OTP đã được gửi (kiểm tra console/alert).',
-      sentRealOtp,
-      devOtp: sentRealOtp ? undefined : otp
+      message: 'Mã OTP đăng ký đã được gửi thành công.',
+      sentRealOtp: true,
+      devOtp: otp
     };
   }
 

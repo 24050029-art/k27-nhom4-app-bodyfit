@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, Pressable, TextInput, View, Image, ActivityIndicator, Platform, Text, useWindowDimensions } from 'react-native';
+import { StyleSheet, ScrollView, Pressable, TextInput, View, Image, ActivityIndicator, Platform, Text, useWindowDimensions, Alert } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalDb, CommunityPost, Challenge, LiftingRecords, Quest, LiftingHistoryLog } from '@/hooks/use-local-db';
 import { Spacing, MaxContentWidth, DEFAULT_AVATAR } from '@/constants/theme';
@@ -152,8 +153,11 @@ export default function ExploreScreen() {
   const { 
     userProfile, 
     currentUser,
+    isAdmin,
+    backendUrl,
     communityPosts, 
     addCommunityPost, 
+    deleteCommunityPost,
     toggleLikePost, 
     addCommentToPost,
     challenges,
@@ -170,6 +174,43 @@ export default function ExploreScreen() {
     claimQuestReward,
     buyBadge
   } = useLocalDb();
+
+  const formatMediaUrl = (url?: string | null) => {
+    if (!url || typeof url !== 'string' || !url.trim()) return null;
+    let clean = url.trim();
+    if (clean.startsWith('data:') || clean.startsWith('file:')) return clean;
+
+    if (clean.startsWith('http://localhost:3000') || clean.startsWith('http://127.0.0.1:3000')) {
+      clean = clean.replace('http://localhost:3000', backendUrl).replace('http://127.0.0.1:3000', backendUrl);
+    }
+
+    if (!clean.startsWith('http')) {
+      const filename = clean.includes('/') ? clean.split('/').pop() : clean;
+      return `${backendUrl}/v1/users/avatars/${filename}`;
+    }
+
+    return clean;
+  };
+
+  const formatAvatar = (url?: string | null) => {
+    if (!url || !url.trim()) return DEFAULT_AVATAR;
+    let clean = url.trim();
+    if (clean.startsWith('data:') || clean.startsWith('file:')) return clean;
+
+    if (clean.startsWith('http://localhost:3000') || clean.startsWith('http://127.0.0.1:3000')) {
+      clean = clean.replace('http://localhost:3000', backendUrl).replace('http://127.0.0.1:3000', backendUrl);
+    }
+
+    if (clean.startsWith('http')) {
+      if (clean.includes('/v1/users/avatars/')) {
+        const filename = clean.split('/v1/users/avatars/').pop();
+        return `${backendUrl}/v1/users/avatars/${filename}`;
+      }
+      return clean;
+    }
+    const filename = clean.includes('/') ? clean.split('/').pop() : clean;
+    return `${backendUrl}/v1/users/avatars/${filename}`;
+  };
 
   // Navigation segment: 'feed' | 'challenges' | 'leaderboard' | 'strength'
   const [activeSegment, setActiveSegment] = useState<'feed' | 'challenges' | 'leaderboard' | 'strength'>('feed');
@@ -221,8 +262,106 @@ export default function ExploreScreen() {
   const [newPostText, setNewPostText] = useState('');
   const [newPostPhoto, setNewPostPhoto] = useState('');
   const [showPhotoInput, setShowPhotoInput] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const [commentTexts, setCommentTexts] = useState<{ [postId: string]: string }>({});
+
+  const handlePickPostPhoto = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e: any) => {
+          const file = e.target?.files?.[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              const rawDataUrl = event.target?.result as string;
+              if (rawDataUrl) {
+                // Compress via Canvas on Web to max 800px & 0.6 JPEG quality for instant payload
+                const img = new (window as any).Image();
+                img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  const MAX_SIZE = 800;
+                  let width = img.width;
+                  let height = img.height;
+                  if (width > height) {
+                    if (width > MAX_SIZE) {
+                      height = Math.round((height * MAX_SIZE) / width);
+                      width = MAX_SIZE;
+                    }
+                  } else {
+                    if (height > MAX_SIZE) {
+                      width = Math.round((width * MAX_SIZE) / height);
+                      height = MAX_SIZE;
+                    }
+                  }
+                  canvas.width = width;
+                  canvas.height = height;
+                  const ctx = canvas.getContext('2d');
+                  if (ctx) {
+                    ctx.drawImage(img, 0, 0, width, height);
+                    const compressed = canvas.toDataURL('image/jpeg', 0.6);
+                    setNewPostPhoto(compressed);
+                  } else {
+                    setNewPostPhoto(rawDataUrl);
+                  }
+                  setShowPhotoInput(true);
+                };
+                img.onerror = () => {
+                  setNewPostPhoto(rawDataUrl);
+                  setShowPhotoInput(true);
+                };
+                img.src = rawDataUrl;
+              }
+            };
+            reader.readAsDataURL(file);
+          }
+        };
+        input.click();
+        return;
+      }
+
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Quyền truy cập', 'Ứng dụng cần quyền truy cập thư viện ảnh để đính kèm tập tin.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets?.[0]) {
+        const asset = result.assets[0];
+        let imageUri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+
+        try {
+          const ImageManipulator = require('expo-image-manipulator');
+          const saved = await ImageManipulator.manipulateAsync(
+            asset.uri,
+            [{ resize: { width: 800 } }],
+            { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+          );
+          if (saved.base64) {
+            imageUri = `data:image/jpeg;base64,${saved.base64}`;
+          }
+        } catch (manipErr) {
+          console.warn('ImageManipulator fallback to base64 asset:', manipErr);
+        }
+
+        setNewPostPhoto(imageUri);
+        setShowPhotoInput(true);
+      }
+    } catch (error) {
+      console.error('Pick post image error:', error);
+      Alert.alert('Lỗi', 'Không thể chọn ảnh từ thiết bị.');
+    }
+  };
 
   // Leaderboard State
   const [leaderboard, setLeaderboard] = useState<any>({ topActive: [], topWeightLoss: [] });
@@ -302,7 +441,7 @@ export default function ExploreScreen() {
   if (!userProfile) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <LinearGradient colors={['#0F0D0B', '#171411', '#0A0907']} style={StyleSheet.absoluteFillObject} />
+        <LinearGradient colors={['#0F0D0B', '#171411', '#0A0907']} style={StyleSheet.absoluteFill} />
         <View style={styles.centerContainer}>
           <Text style={{ fontSize: 15, fontWeight: '700', color: 'rgba(255, 248, 231, 0.6)', textAlign: 'center' }}>
             Vui lòng hoàn thành Onboarding ở tab Home để tham gia cộng đồng.
@@ -327,7 +466,7 @@ export default function ExploreScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
       <LinearGradient 
         colors={isDark ? ['#0F0D0B', '#171411', '#0A0907'] : [theme.background, theme.backgroundSecondary, theme.background]} 
-        style={StyleSheet.absoluteFillObject} 
+        style={StyleSheet.absoluteFill} 
       />
 
       {/* Top Header Navigation Segment Tabs */}
@@ -394,24 +533,44 @@ export default function ExploreScreen() {
                     style={[styles.composerInput, { backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.text }]}
                   />
 
-                  {/* Photo URL Input & Live Preview */}
-                  {showPhotoInput && (
+                  {/* Photo File Attachment Container & Live Preview */}
+                  {(showPhotoInput || !!newPostPhoto) && (
                     <View style={styles.photoInputContainer}>
-                      <TextInput
-                        placeholder="Dán liên kết ảnh minh họa (http://...)"
-                        value={newPostPhoto}
-                        onChangeText={setNewPostPhoto}
-                        placeholderTextColor="rgba(255, 248, 231, 0.45)"
-                        style={styles.photoUrlInput}
-                      />
                       {newPostPhoto.trim() ? (
                         <View style={styles.photoPreviewWrap}>
                           <Image source={{ uri: newPostPhoto }} style={styles.photoPreviewImg} resizeMode="cover" />
-                          <Pressable onPress={() => setNewPostPhoto('')} style={styles.removePhotoBtn}>
-                            <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '900' }}>✕ Xóa</Text>
-                          </Pressable>
+                          <View style={styles.photoAttachedBadge}>
+                            <Text style={styles.photoAttachedBadgeText}>📁 Tập tin ảnh đã đính kèm</Text>
+                          </View>
+                          <View style={styles.photoActionGroup}>
+                            <Pressable onPress={handlePickPostPhoto} style={styles.changePhotoBtn}>
+                              <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>🔄 Chọn ảnh khác</Text>
+                            </Pressable>
+                            <Pressable onPress={() => { setNewPostPhoto(''); setShowPhotoInput(false); }} style={styles.removePhotoBtn}>
+                              <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>✕ Xóa</Text>
+                            </Pressable>
+                          </View>
                         </View>
-                      ) : null}
+                      ) : (
+                        <View style={styles.photoPickerDropzone}>
+                          <Pressable onPress={handlePickPostPhoto} style={styles.pickFileBtn}>
+                            <Text style={styles.pickFileBtnText}>📁 Nhấp để chọn tập tin ảnh từ thiết bị (Điện thoại / Máy tính)</Text>
+                            <Text style={styles.pickFileSubText}>Hỗ trợ PNG, JPG, JPEG, WEBP</Text>
+                          </Pressable>
+                          <Pressable onPress={() => setShowUrlInput(!showUrlInput)} style={styles.toggleUrlBtn}>
+                            <Text style={styles.toggleUrlText}>{showUrlInput ? 'Ẩn dán URL' : '🔗 Hoặc dán liên kết URL ảnh'}</Text>
+                          </Pressable>
+                          {showUrlInput && (
+                            <TextInput
+                              placeholder="Dán liên kết ảnh minh họa (http://...)"
+                              value={newPostPhoto}
+                              onChangeText={setNewPostPhoto}
+                              placeholderTextColor="rgba(255, 248, 231, 0.45)"
+                              style={styles.photoUrlInput}
+                            />
+                          )}
+                        </View>
+                      )}
                     </View>
                   )}
 
@@ -419,10 +578,16 @@ export default function ExploreScreen() {
                   <View style={styles.composerActionBar}>
                     <View style={styles.quickTagsRow}>
                       <Pressable 
-                        onPress={() => setShowPhotoInput(!showPhotoInput)} 
-                        style={[styles.quickTagBtn, showPhotoInput && { backgroundColor: 'rgba(255, 159, 28, 0.25)', borderColor: '#FF9F1C' }]}
+                        onPress={() => {
+                          if (!newPostPhoto) {
+                            handlePickPostPhoto();
+                          } else {
+                            setShowPhotoInput(!showPhotoInput);
+                          }
+                        }} 
+                        style={[styles.quickTagBtn, (showPhotoInput || !!newPostPhoto) && { backgroundColor: 'rgba(255, 159, 28, 0.25)', borderColor: '#FF9F1C' }]}
                       >
-                        <Text style={styles.quickTagText}>🖼️ Ảnh</Text>
+                        <Text style={styles.quickTagText}>{newPostPhoto ? '🖼️ Đã đính kèm ảnh' : '📷 Gắn file ảnh'}</Text>
                       </Pressable>
 
                       <Pressable 
@@ -492,9 +657,11 @@ export default function ExploreScreen() {
                   filteredPosts.map(post => {
                     const isLikedByMe = post.likes.some(l => l.userId === myUid);
                     const isMyPost = post.userId === myUid || post.username === currentUser?.username;
-                    const authorAvatar = isMyPost 
+                    const canDelete = isMyPost || isAdmin || currentUser?.role === 'ADMIN';
+                    const rawAvatar = isMyPost 
                       ? myAvatar 
-                      : ((post as any).userProfile?.avatarUrl || DEFAULT_AVATAR);
+                      : ((post as any).userProfile?.avatarUrl || (post as any).avatarUrl || DEFAULT_AVATAR);
+                    const authorAvatar = formatAvatar(rawAvatar);
 
                     return (
                       <View key={post.id} style={[styles.socialPostCard, { backgroundColor: theme.card, borderColor: theme.cardBorder }]}>
@@ -526,7 +693,35 @@ export default function ExploreScreen() {
                             </View>
                           </View>
 
-                          <Text style={{ fontSize: 16, color: theme.textMuted }}>•••</Text>
+                          {canDelete ? (
+                            <Pressable 
+                              onPress={() => {
+                                const confirmMsg = isAdmin && !isMyPost 
+                                  ? `[ADMIN] Bạn có chắc chắn muốn xóa bài viết này của "${post.username}" không?` 
+                                  : 'Bạn có chắc chắn muốn xóa bài viết này không?';
+
+                                if (Platform.OS === 'web') {
+                                  if (confirm(confirmMsg)) {
+                                    deleteCommunityPost(post.id);
+                                  }
+                                } else {
+                                  Alert.alert(
+                                    'Xóa bài viết',
+                                    confirmMsg,
+                                    [
+                                      { text: 'Hủy', style: 'cancel' },
+                                      { text: 'Xóa bài', style: 'destructive', onPress: () => deleteCommunityPost(post.id) }
+                                    ]
+                                  );
+                                }
+                              }}
+                              style={styles.deletePostBtn}
+                            >
+                              <Text style={styles.deletePostBtnText}>🗑️ Xóa</Text>
+                            </Pressable>
+                          ) : (
+                            <Text style={{ fontSize: 16, color: theme.textMuted }}>•••</Text>
+                          )}
                         </View>
 
                         {/* Post Body Content */}
@@ -535,7 +730,11 @@ export default function ExploreScreen() {
                         {/* Post Image Attachment */}
                         {post.photoUrl ? (
                           <View style={styles.postImageContainer}>
-                            <Image source={{ uri: post.photoUrl }} style={styles.postMediaImg} resizeMode="contain" />
+                            <Image 
+                              source={{ uri: formatMediaUrl(post.photoUrl) || DEFAULT_AVATAR }} 
+                              style={styles.postMediaImg} 
+                              resizeMode="cover"
+                            />
                           </View>
                         ) : null}
 
@@ -1078,34 +1277,105 @@ const styles = StyleSheet.create({
   },
   photoPreviewWrap: {
     position: 'relative',
-    height: 140,
+    height: 180,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 159, 28, 0.3)',
+    borderColor: 'rgba(255, 159, 28, 0.4)',
   },
   photoPreviewImg: {
     width: '100%',
     height: '100%',
   },
-  removePhotoBtn: {
+  photoAttachedBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 159, 28, 0.3)',
+  },
+  photoAttachedBadgeText: {
+    color: '#FF9F1C',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  photoActionGroup: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  changePhotoBtn: {
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  removePhotoBtn: {
+    backgroundColor: 'rgba(220, 38, 38, 0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  photoPickerDropzone: {
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 159, 28, 0.3)',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    gap: 8,
+  },
+  pickFileBtn: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 159, 28, 0.15)',
+    borderWidth: 1,
+    borderColor: '#FF9F1C',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  pickFileBtnText: {
+    color: '#FFF8E7',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  pickFileSubText: {
+    color: 'rgba(255, 248, 231, 0.5)',
+    fontSize: 11,
+    marginTop: 4,
+  },
+  toggleUrlBtn: {
     paddingVertical: 4,
-    borderRadius: 6,
+  },
+  toggleUrlText: {
+    color: 'rgba(255, 159, 28, 0.8)',
+    fontSize: 12,
+    textDecorationLine: 'underline',
   },
   composerActionBar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
     paddingTop: 4,
   },
   quickTagsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
+    alignItems: 'center',
   },
   quickTagBtn: {
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
@@ -1229,13 +1499,26 @@ const styles = StyleSheet.create({
   postImageContainer: {
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: '#0A0908',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 159, 28, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    marginVertical: 4,
+    marginVertical: 6,
+  },
+  deletePostBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  deletePostBtnText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
   },
   postMediaImg: {
     width: '100%',

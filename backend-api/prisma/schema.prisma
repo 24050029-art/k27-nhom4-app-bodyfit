@@ -119,7 +119,7 @@ model WeightLog {
   chestCm    Float?   @map("vong_nguc_cm")
   hipsCm     Float?   @map("vong_mong_cm")
   bodyFatPct Float?   @map("ty_le_mo_pct")
-  photoUrl   String?  @map("anh_url") @db.VarChar(512)
+  photoUrl   String?  @map("anh_url") @db.Text
   loggedDate String   @map("ngay_ghi")
   loggedAt   DateTime @default(now()) @map("thoi_gian_ghi")
 
@@ -218,7 +218,7 @@ model CommunityPost {
   user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   username  String                 @map("ten_nguoi_dung")
   content   String                 @db.Text @map("noi_dung")
-  photoUrl  String?                @map("anh_url") @db.VarChar(512)
+  photoUrl  String?                @map("anh_url") @db.Text
   createdAt DateTime               @default(now()) @map("ngay_tao")
   likes     CommunityPostLike[]
   comments  CommunityPostComment[]
